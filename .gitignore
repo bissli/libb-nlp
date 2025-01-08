@@ -1,0 +1,5 @@
+poetry.lock
+*aider*
+.root
+exe/
+.github/workflows/
