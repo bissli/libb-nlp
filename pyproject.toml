@@ -1,0 +1,62 @@
+[tool.poetry]
+name = "libb-nlp"
+version = "0.1.0"
+description = ""
+authors = ["bissli <bissli.xyz@protonmail.com>"]
+readme = "README.md"
+packages = [{ include = "lnlp", from = "src" }]
+repository = "https://github.com/bissli/libb-nlp"
+
+[tool.poetry.dependencies]
+python = "^3.9"
+langchain = "^0.3.14"
+seaborn = "*"
+spacy = "*"
+torch = { version = "*", optional = true }
+torchvision = { version = "*", optional = true }
+
+en-core-web-sm = { url = "https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.7.0/en_core_web_sm-3.7.0-py3-none-any.whl" }
+
+# = test
+asserts = { version = "*", optional = true }
+pytest = { version = "*", optional = true }
+pdbpp = { git = "https://github.com/pdbpp/pdbpp.git", optional = true }
+bump2version = { version = "*", optional = true }
+
+[tool.poetry.group.cpu]
+optional = true
+
+[tool.poetry.group.cpu.dependencies]
+torch = { version = "*", source = "torch_cpu", markers = "extra=='cpu' and extra!='gpu'" }
+torchvision = { version = "*", source = "torch_cpu", markers = "extra=='cpu' and extra!='gpu'" }
+
+[tool.poetry.group.gpu]
+optional = true
+
+[tool.poetry.group.gpu.dependencies]
+torch = { version = "*", source = "torch_cuda", markers = "extra=='gpu' and extra!='cpu'" }
+torchvision = { version = "*", source = "torch_cuda", markers = "extra=='gpu' and extra!='cpu'" }
+
+[tool.poetry.extras]
+test = [
+  "asserts",
+  "pdbpp",
+  "pytest",
+  "bump2version",
+]
+cpu = ["torch", "torchvision"]
+gpu = ["torch", "torchvision"]
+
+[[tool.poetry.source]]
+name = "torch_cpu"
+url = "https://download.pytorch.org/whl/cpu"
+priority = "explicit"
+
+[[tool.poetry.source]]
+name = "torch_cuda"
+url = "https://download.pytorch.org/whl/cu121"
+priority = "explicit"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
