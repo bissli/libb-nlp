@@ -1,8 +1,21 @@
+import logging
+import signal
+import sys
+
 from fastapi import FastAPI, File, HTTPException, UploadFile
-from fastapi.responses import HTMLResponse
-from lnlp import TextSplitterSimilarity, TextSplitterSpacy
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import HTMLResponse, JSONResponse
 from lnlp.loaders.pdf import PDFTextExtractor
+from lnlp.managers import SplitterManager
 from pydantic import BaseModel
+from starlette.exceptions import HTTPException as StarletteHTTPException
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
 # HTML template for GPU info display
 GPU_INFO_TEMPLATE = """
@@ -30,6 +43,52 @@ app = FastAPI(
     description='API for text splitting using spaCy and similarity-based methods',
     version='0.1.0'
 )
+
+
+def signal_handler(sig, frame):
+    logger.info('Received shutdown signal')
+    sys.exit(0)
+
+
+signal.signal(signal.SIGINT, signal_handler)
+signal.signal(signal.SIGTERM, signal_handler)
+
+
+@app.on_event('startup')
+async def startup_event():
+    logger.info('Application startup')
+    app.state.splitter_manager = SplitterManager()
+
+
+@app.on_event('shutdown')
+async def shutdown_event():
+    logger.info('Application shutdown')
+    if hasattr(app.state, 'splitter_manager'):
+        await app.state.splitter_manager.cleanup()
+
+
+@app.exception_handler(StarletteHTTPException)
+async def http_exception_handler(request, exc):
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={'detail': str(exc.detail)}
+    )
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request, exc):
+    return JSONResponse(
+        status_code=422,
+        content={'detail': str(exc)}
+    )
+
+
+@app.exception_handler(Exception)
+async def general_exception_handler(request, exc):
+    return JSONResponse(
+        status_code=500,
+        content={'detail': f'Internal server error: {str(exc)}'}
+    )
 
 
 class TextRequest(BaseModel):
@@ -63,14 +122,17 @@ async def split_text_spacy(request: TextRequest):
         ```
     """
     try:
-        splitter = TextSplitterSpacy()
+        logger.info('Processing spaCy text split request')
+        splitter = await app.state.splitter_manager.get_spacy_splitter()
         chunks = splitter.split_text(
             request.text,
             chunk_size=request.chunk_size,
             chunk_overlap=request.chunk_overlap
         )
+        logger.info(f'Successfully split text into {len(chunks)} chunks')
         return TextResponse(chunks=chunks)
     except Exception as e:
+        logger.exception('Error in split_text_spacy')
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -93,7 +155,7 @@ async def split_text_similarity(request: TextRequest):
     as it uses semantic similarity to determine chunk boundaries.
     """
     try:
-        splitter = TextSplitterSimilarity()
+        splitter = await app.state.splitter_manager.get_similarity_splitter()
         chunks = splitter.split_text(request.text)
         return TextResponse(chunks=chunks)
     except Exception as e:
