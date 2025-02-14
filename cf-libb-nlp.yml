@@ -1,0 +1,277 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "ECS Cluster with GPU-enabled EC2, ALB, and CloudWatch Logs – Template for ${ApplicationName}"
+
+Parameters:
+  ApplicationName:
+    Description: Base name for all resources (e.g. myapp will create myapp-cl, myapp-al, etc.)
+    Type: String
+  VpcId:
+    Description: VPC ID for deploying resources
+    Type: AWS::EC2::VPC::Id
+  PrivateSubnet1Id:
+    Description: First private subnet ID for ECS instances/tasks
+    Type: AWS::EC2::Subnet::Id
+  PrivateSubnet2Id:
+    Description: Second private subnet ID for ECS instances/tasks (for HA)
+    Type: AWS::EC2::Subnet::Id
+  # PublicSubnet1Id:
+    # Description: First public subnet ID for ALB
+    # Type: AWS::EC2::Subnet::Id
+  # PublicSubnet2Id:
+    # Description: Second public subnet ID for ALB
+    # Type: AWS::EC2::Subnet::Id
+  IamInstanceProfile:
+    Description: Name of existing IAM instance profile for ECS EC2 instance (e.g., CloudFormationExecutionRole)
+    Type: String
+  EcrRepository:
+    Description: Repository name containing the ECR Docker Image (e.g., libb-nlp)
+    Type: String
+  ImageTag:
+    Description:  Docker image tag to deploy (e.g., latest)
+    Type: String
+    Default: latest
+  InstanceType:
+    Description: EC2 instance type for the ECS container instance
+    Type: String
+    Default: g4dn.xlarge
+  Region:
+    Description: AWS Region (for log configuration)
+    Type: String
+    Default: us-east-1
+  ECSGpuAMI:
+    Description: Latest Amazon Linux 2 ECS-Optimized GPU AMI ID (from SSM Parameter Store)
+    Type: 'AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>'
+    Default: /aws/service/ecs/optimized-ami/amazon-linux-2/kernel-5.10/gpu/recommended/image_id
+
+Resources:
+  ECSCluster:
+    Type: AWS::ECS::Cluster
+    Properties:
+      ClusterName: !Sub "${ApplicationName}-cl"
+      Tags:
+      - Key: Fund
+        Value: True
+
+  ECSInstanceSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: !Sub "${ApplicationName}-sg-ecs"
+      GroupDescription: !Sub "Security group for ECS instances of ${ApplicationName}"
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        # Allow ALB to connect to ECS instances on port 8000
+        - IpProtocol: tcp
+          FromPort: 8000
+          ToPort: 8000
+          SourceSecurityGroupId: !Ref ALBSecurityGroup
+      SecurityGroupEgress:
+        # Allow outbound to anywhere (for internet access via NAT)
+        - IpProtocol: -1
+          FromPort: 0
+          ToPort: 0
+          CidrIp: 0.0.0.0/0
+      Tags:
+      - Key: Fund
+        Value: True
+
+  ECSInstanceSecurityGroupSelfIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref ECSInstanceSecurityGroup
+      IpProtocol: -1
+      FromPort: 0
+      ToPort: 65535
+      SourceSecurityGroupId: !Ref ECSInstanceSecurityGroup
+      Description: "Allow all traffic between cluster instances"
+
+  ALBSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: !Sub "${ApplicationName}-sg-alb"
+      GroupDescription: !Sub "Security group for ALB of ${ApplicationName}"
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        # Allow inbound from anywhere on port 80 (public access)
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+      SecurityGroupEgress:
+        # Allow all outbound (ALB can reach ECS targets)
+        - IpProtocol: -1
+          FromPort: 0
+          ToPort: 0
+          CidrIp: 0.0.0.0/0
+      Tags:
+      - Key: Fund
+        Value: True
+
+  LaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    DependsOn: ECSInstanceSecurityGroup
+    Properties:
+      LaunchTemplateName: !Sub "${ApplicationName}-lt"
+      LaunchTemplateData:
+        ImageId: !Ref ECSGpuAMI  # Latest ECS GPU-optimized AMI ID from SSM
+        InstanceType: !Ref InstanceType
+        IamInstanceProfile:
+          Name: !Ref IamInstanceProfile
+        SecurityGroupIds:
+          - !Ref ECSInstanceSecurityGroup
+        TagSpecifications:
+          - ResourceType: instance
+            Tags:
+            - Key: Name
+              Value: !Sub "${ApplicationName}-gpu"
+        BlockDeviceMappings:
+          - DeviceName: /dev/xvda
+            Ebs:
+              Encrypted: true
+              VolumeSize: 100
+              VolumeType: gp3
+        UserData:
+          # Base64-encoded user-data to join cluster and enable GPU support
+          Fn::Base64: !Sub |
+            #!/bin/bash
+            echo "ECS_CLUSTER=${ApplicationName}-cl" >> /etc/ecs/ecs.config
+            echo "ECS_ENABLE_GPU_SUPPORT=true" >> /etc/ecs/ecs.config
+            rm /etc/sysconfig/docker
+            echo DAEMON_MAXFILES=1048576 | tee -a /etc/sysconfig/docker
+            echo OPTIONS="--default-ulimit nofile=32768:65536 --default-runtime nvidia" | tee -a /etc/sysconfig/docker
+            echo DAEMON_PIDFILE_TIMEOUT=10 | tee -a /etc/sysconfig/docker
+            systemctl restart docker
+
+  ECSAutoScalingGroup:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    DependsOn: ECSCluster
+    Properties:
+      AutoScalingGroupName: !Sub "${ApplicationName}-asg"
+      DesiredCapacity: 1
+      MinSize: 1
+      MaxSize: 1
+      VPCZoneIdentifier:
+        - !Ref PrivateSubnet1Id
+        - !Ref PrivateSubnet2Id
+      LaunchTemplate:
+        LaunchTemplateId: !Ref LaunchTemplate
+        Version: !GetAtt LaunchTemplate.LatestVersionNumber
+      # You could attach TargetGroupARNs here for instance-level health checks,
+      # but we'll rely on ECS service health management instead.
+      Tags:
+      - Key: Fund
+        Value: True
+        PropagateAtLaunch: true
+
+  ApplicationLoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: !Sub "${ApplicationName}-al"
+      Scheme: internal # internet-facing for public
+      Subnets:
+        - !Ref PrivateSubnet1Id # can be public if desired
+        - !Ref PrivateSubnet2Id # can be public if desired
+      SecurityGroups:
+        - !Ref ALBSecurityGroup
+      Type: application
+      IpAddressType: ipv4
+      Tags:
+      - Key: Fund
+        Value: True
+
+  ApplicationTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: !Sub "${ApplicationName}-tg"
+      VpcId: !Ref VpcId
+      Protocol: HTTP
+      Port: 8000
+      TargetType: ip
+      HealthCheckPath: "/health"
+      HealthCheckIntervalSeconds: 60
+      HealthCheckProtocol: HTTP
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 5
+      UnhealthyThresholdCount: 2
+
+  ApplicationListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    DependsOn:
+      - ApplicationLoadBalancer
+      - ApplicationTargetGroup
+    Properties:
+      LoadBalancerArn: !Ref ApplicationLoadBalancer
+      Port: 80
+      Protocol: HTTP
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref ApplicationTargetGroup
+
+  ECSLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/ecs/${ApplicationName}"
+      RetentionInDays: 30
+      Tags:
+      - Key: Fund
+        Value: True
+
+  ECSTaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: !Ref ApplicationName
+      NetworkMode: awsvpc
+      RequiresCompatibilities: [ EC2 ]
+      Cpu: "3972"    # Using ~97% of available CPU (4096)
+      Memory: "15360" # Using ~95% of available memory (16GB)
+      ExecutionRoleArn: !Ref AWS::NoValue   # (Not required for EC2 launch type if instance role covers permissions)
+      TaskRoleArn: !Ref AWS::NoValue        # (No specific task IAM role needed here)
+      ContainerDefinitions:
+        - Name: !Ref ApplicationName
+          Image: !Sub "${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${EcrRepository}:${ImageTag}"
+          Essential: true
+          PortMappings:
+            - ContainerPort: 8000
+          ResourceRequirements:
+            - Type: GPU
+              Value: "1"
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref ECSLogGroup      # reference by name/ARN works because created above
+              awslogs-region: !Ref Region
+              awslogs-stream-prefix: "ecs"
+
+  ECSService:
+    Type: AWS::ECS::Service
+    DependsOn:
+      - ApplicationListener   # ensure ALB listener (and thus ALB and TG) is ready
+      - ECSAutoScalingGroup   # ensure the EC2 instance is launched (for initial task placement)
+    Properties:
+      Cluster: !Ref ECSCluster
+      ServiceName: !Sub "${ApplicationName}-svc"
+      TaskDefinition: !Ref ECSTaskDefinition
+      DesiredCount: 1
+      LaunchType: EC2
+      DeploymentConfiguration:
+        MinimumHealthyPercent: 0    # allow going down to 0 tasks during deploy
+        MaximumPercent: 100         # do not launch extra tasks above desired count
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: DISABLED
+          SecurityGroups:
+            - !Ref ECSInstanceSecurityGroup
+          Subnets:
+            - !Ref PrivateSubnet1Id
+            - !Ref PrivateSubnet2Id
+      LoadBalancers:
+        - ContainerName: !Ref ApplicationName
+          ContainerPort: 8000
+          TargetGroupArn: !Ref ApplicationTargetGroup
+      Tags:
+      - Key: Fund
+        Value: True
+
+Outputs:
+  LoadBalancerDNSName:
+    Description: DNS name of the Application Load Balancer
+    Value: !GetAtt ApplicationLoadBalancer.DNSName

@@ -1,0 +1,51 @@
+# Version control
+.git
+.gitignore
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.env
+*.egg-info/
+dist/
+build/
+*.egg
+
+# IDE/Editor
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# AWS
+.aws/
+credentials
+config
+
+# Project specific
+manifest.yaml
+.dockerignore
+Dockerfile
+*.log
+.cache
+tests/
+test/
+.coverage
+htmlcov/
+.pytest_cache/
+
+# Temp files
+*.tmp
+.DS_Store
+
+# Misc
+*aider*
+.root
+exe/
+.github/workflows/
