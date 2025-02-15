@@ -2,4 +2,5 @@ poetry.lock
 *aider*
 .root
 exe/
+.envrc
 .github/workflows/

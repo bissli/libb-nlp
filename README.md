@@ -151,103 +151,9 @@ Note: If you only changed application code (not dependencies), you can simply re
 docker compose build && docker compose up
 ```
 
-### Deploying with CloudFormation
-
-The application can be deployed to AWS using the included CloudFormation template. It supports GPU-accelerated deployment on ECS with proper networking and load balancing.
-
-#### Prerequisites
-
-1. AWS CLI installed and configured:
-```bash
-aws configure
-```
-
-2. Required local tools:
-- Docker installed and running
-- AWS CLI with configured credentials
-- Existing VPC with private subnets
-- ECR repository for the container image
-
-#### Deployment Steps
-
-1. First, build and push the Docker image to ECR using the provided script:
-```bash
-# Set up environment variables in .env file:
-AWS_ACCOUNT_ID=your_account_id
-AWS_REGION=your_region
-ECR_REPOSITORY=libb-nlp
-IMAGE_TAG=latest
-
-# Push to ECR
-./push.sh
-```
-
-2. Deploy the CloudFormation stack:
-```bash
-aws cloudformation create-stack \
-  --stack-name libb-nlp \
-  --template-body file://cf-libb-nlp.yml \
-  --capabilities CAPABILITY_NAMED_IAM \
-  --parameters \
-    ParameterKey=ApplicationName,ParameterValue=libb-nlp \
-    ParameterKey=VpcId,ParameterValue=vpc-xxxxx \
-    ParameterKey=PrivateSubnet1Id,ParameterValue=subnet-xxxxx \
-    ParameterKey=PrivateSubnet2Id,ParameterValue=subnet-xxxxx \
-    ParameterKey=IamInstanceProfile,ParameterValue=your-instance-profile \
-    ParameterKey=EcrRepository,ParameterValue=libb-nlp \
-    ParameterKey=Region,ParameterValue=us-east-1 \
-    ParameterKey=ImageTag,ParameterValue=latest
-```
-
-The CloudFormation template will create:
-- ECS cluster with GPU-enabled instances
-- Application Load Balancer in private subnets
-- Security groups for ECS and ALB
-- Auto Scaling Group for EC2 instances
-- ECS Service and Task Definition
-- CloudWatch Log Group
-
-3. Monitor the deployment:
-```bash
-# Check stack status
-aws cloudformation describe-stacks --stack-name libb-nlp
-
-# Get the ALB DNS name
-aws cloudformation describe-stacks \
-  --stack-name libb-nlp \
-  --query 'Stacks[0].Outputs[?OutputKey==`LoadBalancerDNSName`].OutputValue' \
-  --output text
-```
-
-4. To update the deployment with a new Docker image:
-```bash
-# 1. First update and push your Docker image
-./push.sh
-
-# 2. Force ECS to use the new image by updating the service
-# Replace APP_NAME with your ApplicationName value from CloudFormation
-aws ecs update-service \
-  --cluster APP_NAME-cl \
-  --service APP_NAME-svc \
-  --force-new-deployment
-
-# 3. Monitor the deployment status
-aws ecs describe-services \
-  --cluster APP_NAME-cl \
-  --services APP_NAME-svc \
-  --query 'services[0].deployments'
-```
-
-Note: You don't need to use CloudWatch for updating the image. The ECS
-update-service command above will automatically deploy the new image.
-CloudWatch is used for monitoring logs and metrics, not for deployments.
-
-5. To tear down:
-```bash
-aws cloudformation delete-stack --stack-name libb-nlp
-```
-
 ## Required IAM Roles and Permissions
+
+Before deploying, ensure you have the correct IAM roles and permissions set up:
 
 ### Deployment Role
 To deploy using CloudFormation, you need a role with these managed policies:
@@ -303,6 +209,115 @@ Make sure to:
 1. Create these roles before deployment
 2. Update the CloudFormation parameters with the correct role names
 3. Ensure the PassRole policy has the correct ARN for your account
+
+### Resource Naming Convention
+All resources created by CloudFormation will be prefixed with the ApplicationName parameter value:
+- ECS Cluster: `<name>-cl`
+- ECS Service: `<name>-svc`
+- Load Balancer: `<name>-al`
+- Target Group: `<name>-tg`
+- Security Groups: `<name>-sg-alb`, `<name>-sg-ecs`
+- Auto Scaling Group: `<name>-asg`
+- Launch Template: `<name>-lt`
+- CloudWatch Log Group: `/ecs/<name>`
+
+### Deploying with CloudFormation
+
+The application can be deployed to AWS using the included CloudFormation template. It supports GPU-accelerated deployment on ECS with proper networking and load balancing.
+
+#### Prerequisites
+
+1. AWS CLI installed and configured:
+```bash
+aws configure
+```
+
+2. Required local tools:
+- Docker installed and running
+- AWS CLI with configured credentials
+- Existing VPC with private subnets
+- ECR repository for the container image
+- IAM roles and permissions configured as described above
+
+#### Deployment Steps
+
+1. First, build and push the Docker image to ECR using the provided script:
+```bash
+# Set up environment variables in .env file:
+AWS_ACCOUNT_ID=your_account_id
+AWS_REGION=your_region
+ECR_REPOSITORY=libb-nlp
+IMAGE_TAG=latest
+
+# Build locally only
+./docker-ops.sh -b
+
+# Build and push to ECR
+./docker-ops.sh -p
+
+# Build, push and deploy
+./docker-ops.sh -d
+```
+
+2. Deploy the CloudFormation stack:
+```bash
+aws cloudformation create-stack \
+  --stack-name libb-nlp \
+  --template-body file://cf-libb-nlp.yml \
+  --capabilities CAPABILITY_NAMED_IAM \
+  --parameters \
+    ParameterKey=ApplicationName,ParameterValue=libb-nlp \
+    ParameterKey=VpcId,ParameterValue=vpc-xxxxx \
+    ParameterKey=PrivateSubnet1Id,ParameterValue=subnet-xxxxx \
+    ParameterKey=PrivateSubnet2Id,ParameterValue=subnet-xxxxx \
+    ParameterKey=IamInstanceProfile,ParameterValue=your-instance-profile \
+    ParameterKey=EcrRepository,ParameterValue=libb-nlp \
+    ParameterKey=Region,ParameterValue=us-east-1 \
+    ParameterKey=ImageTag,ParameterValue=latest
+```
+
+The CloudFormation template will create:
+- ECS cluster with GPU-enabled instances
+- Application Load Balancer in private subnets
+- Security groups for ECS and ALB
+- Auto Scaling Group for EC2 instances
+- ECS Service and Task Definition
+- CloudWatch Log Group
+
+3. Monitor the deployment:
+```bash
+# Check stack status
+aws cloudformation describe-stacks --stack-name libb-nlp
+
+# Get the ALB DNS name
+aws cloudformation describe-stacks \
+  --stack-name libb-nlp \
+  --query 'Stacks[0].Outputs[?OutputKey==`LoadBalancerDNSName`].OutputValue' \
+  --output text
+```
+
+4. To update the deployment with a new Docker image:
+```bash
+# Deploy new version using docker-ops.sh
+./docker-ops.sh -d
+
+This will:
+1. Build the new Docker image
+2. Push it to ECR
+3. Deploy to ECS
+4. Monitor deployment status
+5. Display the ALB DNS name when complete
+```
+
+Note: You don't need to use CloudWatch for updating the image. The ECS
+update-service command above will automatically deploy the new image.
+CloudWatch is used for monitoring logs and metrics, not for deployments.
+
+5. To tear down:
+```bash
+aws cloudformation delete-stack --stack-name libb-nlp
+```
+
 
 ## Performance Considerations
 
