@@ -25,6 +25,7 @@ python-multipart = "*"
 # = test
 asserts = { version = "*", optional = true }
 pytest = { version = "*", optional = true }
+pytest-docker = { version = "*", optional = true }
 pdbpp = { version = "^0.10.3", optional = true }
 bump2version = { version = "*", optional = true }
 boto3 = { version = '^1.36.18', optional = true }
@@ -52,6 +53,7 @@ test = [
   "bump2version",
   "boto3",
   "docker",
+  "pytest-docker"
 ]
 cpu = ["torch", "torchvision"]
 gpu = ["torch", "torchvision"]
