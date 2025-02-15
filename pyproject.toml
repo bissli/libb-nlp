@@ -26,7 +26,7 @@ python-multipart = "*"
 asserts = { version = "*", optional = true }
 pytest = { version = "*", optional = true }
 pytest-docker = { version = "*", optional = true }
-pdbpp = { version = "^0.10.3", optional = true }
+pdbp = { version = "*", optional = true }
 bump2version = { version = "*", optional = true }
 boto3 = { version = '^1.36.18', optional = true }
 docker = { version = '*', optional = true }
@@ -48,7 +48,7 @@ torchvision = { version = "*", source = "torch_cuda", markers = "extra=='gpu' an
 [tool.poetry.extras]
 test = [
   "asserts",
-  "pdbpp",
+  "pdbp",
   "pytest",
   "bump2version",
   "boto3",

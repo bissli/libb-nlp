@@ -29,23 +29,19 @@ git clone https://github.com/bissli/libb-nlp
 cd libb-nlp
 ```
 
-2. Choose your installation type:
-
+2. Run the installation script:
 ```bash
-# For CPU-only installation (recommended for most users)
-poetry install -E cpu -E test --with cpu --sync
+# Install with automatic GPU detection:
+python install.py
 
-# For GPU-accelerated installation (requires CUDA toolkit)
-poetry install -E gpu -E test --with gpu --sync
-
-# For basic installation without torch (minimal dependencies)
-poetry install
+# To include test dependencies:
+python install.py --test
 ```
 
-3. Verify installation:
-```bash
-poetry run python -c "from lnlp import TextSplitterSpacy, TextSplitterSimilarity"
-```
+The installation script accepts the following flag:
+- `-t` or `--test`: Include test dependencies
+
+Note: The script will automatically detect if CUDA/GPU is available and install the appropriate version.
 
 ## Usage
 

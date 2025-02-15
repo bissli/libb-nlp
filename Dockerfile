@@ -18,11 +18,13 @@ ENV VIRTUAL_ENV=/opt/venv
 RUN python3.11 -m venv $VIRTUAL_ENV
 ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 
+# Copy all application code
+COPY pyproject.toml README.md install.py ./
+
 # Install Python dependencies
-COPY pyproject.toml README.md ./
 RUN pip install --no-cache-dir poetry && \
     poetry config virtualenvs.create false && \
-    poetry install --extras gpu --with gpu --no-root
+    python install.py --gpu
 
 # Copy application code
 COPY src/lnlp ./lnlp
@@ -32,4 +34,4 @@ ENV NVIDIA_VISIBLE_DEVICES=all
 ENV NVIDIA_DRIVER_CAPABILITIES=compute,utility
 
 # Run the application
-CMD ["uvicorn", "lnlp.app:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4", "--reload", "--log-level", "info"]
+CMD ["uvicorn", "lnlp.app:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4", "--reload", "--log-level", "info", "--no-use-colors", "--no-access-log"]
