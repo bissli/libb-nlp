@@ -2,12 +2,12 @@ import logging
 import signal
 import sys
 
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, File, HTTPException, Query, UploadFile
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import HTMLResponse, JSONResponse
 from lnlp.loaders.pdf import PDFTextExtractor
 from lnlp.managers import SplitterManager
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 # Configure logging
@@ -91,24 +91,63 @@ async def general_exception_handler(request, exc):
     )
 
 
-class TextRequest(BaseModel):
-    text: str
-    chunk_size: int = 4000
-    chunk_overlap: int = 200
+class SpacyRequest(BaseModel):
+    """Request model for spaCy-based text splitting.
+
+    Attributes
+        text: The input text to be split into chunks
+        chunk_size: Maximum size of each chunk in characters
+        chunk_overlap: Number of characters to overlap between chunks
+    """
+    text: str = Field(..., description='Input text to split into chunks')
+    chunk_size: int = Field(4000, description='Maximum size of each chunk in characters')
+    chunk_overlap: int = Field(200, description='Number of characters to overlap between chunks')
+
+
+class SimilarityRequest(BaseModel):
+    """Request model for similarity-based text splitting.
+
+    Attributes
+        text: The input text to be split using semantic similarity
+    """
+    text: str = Field(..., description='Input text to split using semantic similarity')
 
 
 class TextResponse(BaseModel):
-    chunks: list[str]
+    """Response model for text splitting endpoints.
+
+    Attributes
+        chunks: List of text chunks after splitting
+    """
+    chunks: list[str] = Field(..., description='List of text chunks after splitting')
 
 
 class PDFResponse(BaseModel):
-    text: list[str]
-    html: str | None = None
+    """Response model for PDF text extraction.
+
+    Attributes
+        text: List of extracted text lines
+        html: Optional HTML-formatted version of the extracted text
+    """
+    text: list[str] = Field(..., description='List of extracted text lines')
+    html: str | None = Field(None, description='HTML-formatted version of the extracted text')
 
 
-@app.post('/split/spacy', response_model=TextResponse)
-async def split_text_spacy(request: TextRequest):
-    r"""Split text using spaCy with configurable chunk size and overlap.
+@app.post('/split/spacy', response_model=TextResponse, tags=['splitting'])
+async def split_text_spacy(request: SpacyRequest):
+    r"""Split text into chunks using spaCy.
+
+    Uses spaCy's natural language processing to split text into chunks while respecting
+    sentence boundaries. Allows configuration of chunk size and overlap.
+
+    Args:
+        request: SpacyRequest containing text and chunking parameters
+
+    Returns
+        TextResponse: List of text chunks
+
+    Raises
+        HTTPException: If text processing fails
 
     Example:
         ```bash
@@ -136,23 +175,30 @@ async def split_text_spacy(request: TextRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post('/split/similarity', response_model=TextResponse)
-async def split_text_similarity(request: TextRequest):
-    r"""Split text using semantic similarity-based chunking.
+@app.post('/split/similarity', response_model=TextResponse, tags=['splitting'])
+async def split_text_similarity(request: SimilarityRequest):
+    r"""Split text into chunks using semantic similarity.
+
+    Uses sentence transformers to compute semantic similarity between sentences
+    and creates chunks based on semantic coherence rather than fixed size.
+
+    Args:
+        request: SimilarityRequest containing text to split
+
+    Returns
+        TextResponse: List of semantically coherent text chunks
+
+    Raises
+        HTTPException: If text processing fails
 
     Example:
         ```bash
         curl -X POST http://localhost:8000/split/similarity \\
           -H "Content-Type: application/json" \\
           -d '{
-            "text": "Your long text here. Multiple sentences...",
-            "chunk_size": 4000,
-            "chunk_overlap": 200
+            "text": "Your long text here. Multiple sentences..."
           }'
         ```
-
-    Note: chunk_size and chunk_overlap parameters are ignored for similarity-based splitting
-    as it uses semantic similarity to determine chunk boundaries.
     """
     try:
         splitter = await app.state.splitter_manager.get_similarity_splitter()
@@ -203,13 +249,28 @@ async def gpu_info():
         return HTMLResponse(content=GPU_INFO_TEMPLATE.format(content='nvidia-smi command not found - No NVIDIA GPU detected'))
 
 
-@app.post('/extract/pdf', response_model=PDFResponse)
+@app.post('/extract/pdf', response_model=PDFResponse, tags=['extraction'])
 async def extract_pdf(
-    file: UploadFile = File(...),
-    html: bool = False,
-    include_page_numbers: bool = False
+    file: UploadFile = File(..., description='PDF file to process'),
+    html: bool = Query(False, description='Return HTML formatted version'),
+    include_page_numbers: bool = Query(False, description='Include page number markers')
 ):
-    r"""Extract text from PDF file with optional HTML formatting.
+    r"""Extract text content from PDF files.
+
+    Processes PDF files to extract text content with options for HTML formatting
+    and page number inclusion. Handles complex PDF layouts and preserves
+    document structure where possible.
+
+    Args:
+        file: PDF file to extract text from
+        html: If True, includes HTML formatted version in response
+        include_page_numbers: If True, adds page number markers
+
+    Returns
+        PDFResponse: Extracted text content and optional HTML formatting
+
+    Raises
+        HTTPException: If PDF processing fails or invalid file
 
     Example:
         ```bash
