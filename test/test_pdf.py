@@ -68,30 +68,25 @@ def test_pdf_extraction_api(docker_container, test_data_dir):
 
     with open(pdf_path, 'rb') as pdf_file:
         files = {'file': ('SPOT.pdf', pdf_file, 'application/pdf')}
-        params = {
-            'html': True,
-            'include_page_numbers': False
-        }
-
         response = requests.post(
             'http://localhost:8000/extract/pdf',
             files=files,
-            params=params
+            params={'include_page_numbers': False}
         )
 
-        assert response.status_code == 200
-        result = response.json()
+    assert response.status_code == 200
+    result = response.json()
 
-        # Test response structure
-        assert 'text' in result
-        assert isinstance(result['text'], list)
-        assert len(result['text']) > 0
-        assert 'html' in result
-        assert isinstance(result['html'], str)
-        assert len(result['html']) > 0
+    # Test response structure
+    assert 'text' in result
+    assert 'html' in result
+    assert isinstance(result['text'], list)
+    assert isinstance(result['html'], str)
+    assert len(result['text']) > 0
+    assert len(result['html']) > 0
 
-        # Verify PDF content
-        verify_pdf_content(result['html'])
+    # Verify PDF content
+    verify_pdf_content(result['html'])
 
 
 def test_pdf_extraction_local(test_data_dir):

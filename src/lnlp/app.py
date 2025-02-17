@@ -238,8 +238,6 @@ async def gpu_info():
     """Get GPU information directly from nvidia-smi command"""
     import subprocess
 
-    from fastapi.responses import HTMLResponse
-
     try:
         result = subprocess.run(['nvidia-smi'], capture_output=True, text=True, check=False)
         if result.returncode == 0:
@@ -252,7 +250,6 @@ async def gpu_info():
 @app.post('/extract/pdf', response_model=PDFResponse, tags=['extraction'])
 async def extract_pdf(
     file: UploadFile = File(..., description='PDF file to process'),
-    html: bool = Query(False, description='Return HTML formatted version'),
     include_page_numbers: bool = Query(False, description='Include page number markers')
 ):
     r"""Extract text content from PDF files.
@@ -263,25 +260,19 @@ async def extract_pdf(
 
     Args:
         file: PDF file to extract text from
-        html: If True, includes HTML formatted version in response
         include_page_numbers: If True, adds page number markers
 
     Returns
-        PDFResponse: Extracted text content and optional HTML formatting
+        PDFResponse: Extracted text content with both plain text and HTML formatting
 
     Raises
         HTTPException: If PDF processing fails or invalid file
 
     Example:
         ```bash
-        # Extract plain text
+        # Extract text and HTML
         curl -X POST http://localhost:8000/extract/pdf \\
           -F "file=@document.pdf"
-
-        # Extract with HTML formatting
-        curl -X POST http://localhost:8000/extract/pdf \\
-          -F "file=@document.pdf" \\
-          -F "html=true"
 
         # Include page numbers
         curl -X POST http://localhost:8000/extract/pdf \\
@@ -296,18 +287,11 @@ async def extract_pdf(
         # Initialize extractor
         extractor = PDFTextExtractor(content)
 
-        # Extract text
+        # Extract both text and HTML
         text = extractor.extract_lines(include_page_numbers=include_page_numbers)
+        html_content = extractor.extract_html(include_page_numbers=include_page_numbers)
 
-        # Get HTML if requested
-        html_content = None
-        if html:
-            html_content = extractor.extract_html(include_page_numbers=include_page_numbers)
-
-        return PDFResponse(
-            text=text,
-            html=html_content
-        )
+        return PDFResponse(text=text, html=html_content)
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
