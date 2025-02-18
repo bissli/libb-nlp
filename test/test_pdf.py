@@ -1,7 +1,7 @@
 import os
 
 import requests
-from lnlp.loaders.pdf import PDFTextExtractor
+from lnlp.services.pdf import PDFTextExtractor
 
 
 def verify_pdf_content(html_content: str):
