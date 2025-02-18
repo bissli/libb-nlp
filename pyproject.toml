@@ -21,6 +21,10 @@ uvicorn = "^0.24.0"
 pydantic = "^2.4.2"
 pdfplumber = "*"
 python-multipart = "*"
+httpx = "*"
+openai = "*"
+anthropic = "*"
+psutil = "*"
 
 # = test
 asserts = { version = "*", optional = true }
@@ -28,7 +32,6 @@ pytest = { version = "*", optional = true }
 pytest-docker = { version = "*", optional = true }
 pdbp = { version = "*", optional = true }
 bump2version = { version = "*", optional = true }
-boto3 = { version = '^1.36.18', optional = true }
 docker = { version = '*', optional = true }
 
 [tool.poetry.group.cpu]
@@ -51,9 +54,8 @@ test = [
   "pdbp",
   "pytest",
   "bump2version",
-  "boto3",
   "docker",
-  "pytest-docker"
+  "pytest-docker",
 ]
 cpu = ["torch", "torchvision"]
 gpu = ["torch", "torchvision"]

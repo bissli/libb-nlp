@@ -3,9 +3,21 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        OPENAI_API_KEY: ${OPENAI_API_KEY}
+        ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+        OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
+        OPENROUTER_REFERER: ${OPENROUTER_REFERER}
+        OPENROUTER_TITLE: ${OPENROUTER_TITLE}
+    restart: unless-stopped
     image: ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPOSITORY}:${IMAGE_TAG}
     environment:
       - ENV=${ENV}
+      - OPENAI_API_KEY
+      - ANTHROPIC_API_KEY
+      - OPENROUTER_API_KEY
+      - OPENROUTER_REFERER
+      - OPENROUTER_TITLE
     network_mode: "host"
     deploy:
       resources:
@@ -15,7 +27,7 @@ services:
               count: 1
               capabilities: [gpu]
     volumes:
-      - ~/.cache/libb-nlp:/root/.cache/libb-nlp
+      - ~/.cache/${ECR_REPOSITORY}:/root/.cache/${ECR_REPOSITORY}
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
