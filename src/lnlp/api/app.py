@@ -3,23 +3,46 @@ import signal
 import sys
 
 import torch
-from fastapi import FastAPI
+import time
+from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import HTMLResponse, JSONResponse
+from starlette.middleware.base import BaseHTTPMiddleware
 from lnlp.api.endpoints import chat, extract, split
 from lnlp.services.provider import LLMProvider
 from lnlp.services.splitters import SplitterManager
 from lnlp.utils.health import health_service
-from lnlp.utils.templates import render_health_report
+from lnlp.utils.templates import render_health_report, render_metrics_report
+from lnlp.utils.metrics import metrics_service
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 logger = logging.getLogger(__name__)
+
+# Middleware to track endpoint metrics
+class MetricsMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        start_time = time.time()
+        response = await call_next(request)
+        duration = time.time() - start_time
+        
+        # Record metric
+        metrics_service.track_request(
+            path=request.url.path,
+            method=request.method,
+            duration=duration
+        )
+        
+        return response
+
 
 app = FastAPI(
     title='Libb-NLP API',
     description='Comprehensive NLP API with text processing, AI integration, and hardware optimization',
     version='0.1.0'
 )
+
+# Add metrics middleware
+app.add_middleware(MetricsMiddleware)
 
 # Include routers
 app.include_router(split.router)
@@ -108,6 +131,12 @@ async def general_exception_handler(request, exc):
         status_code=500,
         content={'detail': f'Internal server error: {str(exc)}'}
     )
+
+
+@app.get('/metrics', response_class=HTMLResponse)
+def metrics():
+    """Get application metrics as HTML report"""
+    return render_metrics_report(metrics_service.get_metrics())
 
 
 @app.get('/health', response_class=HTMLResponse)

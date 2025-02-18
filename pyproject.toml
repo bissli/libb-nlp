@@ -25,6 +25,7 @@ httpx = "*"
 openai = "*"
 anthropic = "*"
 psutil = "*"
+pendulum = "*"
 
 # = test
 asserts = { version = "*", optional = true }

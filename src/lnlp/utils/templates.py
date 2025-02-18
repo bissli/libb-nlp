@@ -1,4 +1,176 @@
-from datetime import datetime
+import pendulum
+
+
+def render_metrics_report(metrics_data: dict) -> str:
+    """Render metrics data as HTML"""
+
+    endpoints_html = []
+    for endpoint in metrics_data['endpoints']:
+        last_called = pendulum.from_timestamp(endpoint['last_called']).in_timezone(pendulum.now().timezone).format('YYYY-MM-DD HH:mm:ss z') if endpoint['last_called'] > 0 else 'Never'
+        endpoints_html.append(f"""
+            <div class="metric">
+                <span>{endpoint['method']} {endpoint['path']}</span>
+                <div class="metric-details">
+                    <span>Count: {endpoint['count']}</span>
+                    <span>Avg Time: {endpoint['avg_time']:.3f}s</span>
+                    <span>Last Called: {last_called}</span>
+                </div>
+            </div>
+        """)
+
+    # Create chart data
+    cpu_data = [[int(t * 1000), v] for t, v in metrics_data['system']['cpu_usage']]
+    memory_data = [[int(t * 1000), v] for t, v in metrics_data['system']['memory_usage']]
+    gpu_data = [[int(t * 1000), v] for t, v in metrics_data['system']['gpu_usage']] if metrics_data['system']['gpu_usage'] else None
+
+    return f"""
+    <html>
+    <head>
+        <script src="https://code.highcharts.com/highcharts.js"></script>
+        <style>
+            :root {{
+                --color-bg: #f8fafc;
+                --color-card: #ffffff;
+                --color-text: #1e293b;
+                --color-border: #e2e8f0;
+                --color-healthy: #22c55e;
+                --color-warning: #f59e0b;
+                --color-error: #ef4444;
+                --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+                --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+            }}
+            body {{
+                font-family: system-ui, -apple-system, sans-serif;
+                line-height: 1.5;
+                padding: 2rem;
+                max-width: 1200px;
+                margin: 0 auto;
+                background: var(--color-bg);
+                color: var(--color-text);
+            }}
+            h1 {{
+                font-size: 2rem;
+                font-weight: 700;
+                margin-bottom: 2rem;
+                color: var(--color-text);
+                text-align: center;
+            }}
+            h2 {{
+                font-size: 1.25rem;
+                font-weight: 600;
+                margin: 0 0 1rem 0;
+                color: var(--color-text);
+            }}
+            .card {{
+                background: var(--color-card);
+                border-radius: 12px;
+                padding: 1.5rem;
+                margin: 1.5rem 0;
+                box-shadow: var(--shadow-md);
+                border: 1px solid var(--color-border);
+            }}
+            .metric {{
+                padding: 0.75rem;
+                border-bottom: 1px solid var(--color-border);
+                font-size: 0.95rem;
+            }}
+            .metric:last-child {{ border: none; }}
+            .metric span:first-child {{ font-weight: 500; }}
+            .metric-details {{
+                display: flex;
+                gap: 1rem;
+                margin-top: 0.5rem;
+                color: #64748b;
+                font-size: 0.9rem;
+            }}
+            .chart {{
+                min-height: 300px;
+                margin: 1rem 0;
+            }}
+            .uptime {{
+                text-align: center;
+                color: #64748b;
+                font-size: 0.9rem;
+                margin-top: 2rem;
+            }}
+        </style>
+    </head>
+    <body>
+        <h1>Application Metrics</h1>
+
+        <div class="card">
+            <h2>System Resources</h2>
+            <div id="resourceChart" class="chart"></div>
+        </div>
+
+        <div class="card">
+            <h2>Endpoint Usage</h2>
+            {''.join(endpoints_html)}
+        </div>
+
+        <div class="uptime">
+            Server Uptime: {str(pendulum.duration(seconds=metrics_data['system']['uptime']).in_words())} ({pendulum.now().in_timezone(pendulum.now().timezone).format('YYYY-MM-DD HH:mm:ss z')})
+        </div>
+
+        <script>
+            Highcharts.chart('resourceChart', {{
+                chart: {{ 
+                    type: 'line', 
+                    zoomType: 'x'
+                }},
+                time: {{
+                    timezone: '{pendulum.now().timezone_name}'
+                }},
+                title: {{ text: null }},
+                legend: {{
+                    align: 'center',
+                    verticalAlign: 'top',
+                    layout: 'horizontal',
+                    margin: 5,
+                    padding: 5
+                }},
+                xAxis: {{
+                    type: 'datetime',
+                    title: {{ text: 'Time' }},
+                    labels: {{
+                        format: '{{value:%H:%M:%S}}',
+                        rotation: -45,
+                        align: 'right'
+                    }},
+                    tickInterval: 10 * 1000,  // 10 second intervals
+                    useUTC: false
+                }},
+                yAxis: {{
+                    title: {{ text: 'Usage %' }},
+                    min: 0,
+                    max: 100
+                }},
+                tooltip: {{
+                    shared: true,
+                    crosshairs: true
+                }},
+                series: [
+                    {{
+                        name: 'CPU',
+                        data: {cpu_data},
+                        color: '#3b82f6'
+                    }},
+                    {{
+                        name: 'Memory',
+                        data: {memory_data},
+                        color: '#10b981'
+                    }},
+                    {f'''{{
+                        name: 'GPU',
+                        data: {gpu_data},
+                        color: '#6366f1'
+                    }},''' if gpu_data else ''}
+                ]
+            }});
+        </script>
+    </body>
+    </html>
+    """
 
 
 def render_health_report(health_data: dict) -> str:
@@ -18,7 +190,7 @@ def render_health_report(health_data: dict) -> str:
                 --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
                 --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1);
             }}
-            body {{ 
+            body {{
                 font-family: system-ui, -apple-system, sans-serif;
                 line-height: 1.5;
                 padding: 2rem;
@@ -27,7 +199,7 @@ def render_health_report(health_data: dict) -> str:
                 background: var(--color-bg);
                 color: var(--color-text);
             }}
-            h1 {{ 
+            h1 {{
                 font-size: 2rem;
                 font-weight: 700;
                 margin-bottom: 2rem;
@@ -40,7 +212,7 @@ def render_health_report(health_data: dict) -> str:
                 margin: 0 0 1rem 0;
                 color: var(--color-text);
             }}
-            .card {{ 
+            .card {{
                 background: var(--color-card);
                 border-radius: 12px;
                 padding: 1.5rem;
@@ -48,7 +220,7 @@ def render_health_report(health_data: dict) -> str:
                 box-shadow: var(--shadow-md);
                 border: 1px solid var(--color-border);
             }}
-            .metric {{ 
+            .metric {{
                 display: flex;
                 justify-content: space-between;
                 align-items: center;
@@ -58,19 +230,19 @@ def render_health_report(health_data: dict) -> str:
             }}
             .metric:last-child {{ border: none; }}
             .metric span:first-child {{ font-weight: 500; }}
-            .healthy {{ 
+            .healthy {{
                 color: var(--color-healthy);
                 font-weight: 600;
             }}
-            .warning {{ 
+            .warning {{
                 color: var(--color-warning);
                 font-weight: 600;
             }}
-            .error {{ 
+            .error {{
                 color: var(--color-error);
                 font-weight: 600;
             }}
-            .gpu-info {{ 
+            .gpu-info {{
                 font-family: ui-monospace, monospace;
                 white-space: pre;
                 background: var(--color-bg);
@@ -151,12 +323,12 @@ def render_health_report(health_data: dict) -> str:
                     PyTorch Version: {health_data['system']['gpu'].get('torch_version', 'Not found')}
                     NVCC Version: {health_data['system']['gpu'].get('nvcc_version', 'Not found')}
                     CUDA Libraries: {'Found' if health_data['system']['gpu'].get('cuda_lib_exists') else 'Not found'}
-                    
+
                     Environment Variables:
                     CUDA_VISIBLE_DEVICES: {health_data['system']['gpu'].get('env_vars', {}).get('CUDA_VISIBLE_DEVICES') or 'Not set'}
                     CUDA_DEVICE_ORDER: {health_data['system']['gpu'].get('env_vars', {}).get('CUDA_DEVICE_ORDER') or 'Not set'}
                     LD_LIBRARY_PATH: {health_data['system']['gpu'].get('env_vars', {}).get('LD_LIBRARY_PATH') or 'Not set'}
-                    
+
                     CUDA Init Error: {health_data['system']['gpu'].get('cuda_init_error', 'No error information')}
                 </div>''' or ''}
         </div>
@@ -167,7 +339,7 @@ def render_health_report(health_data: dict) -> str:
         </div>
 
         <div class="timestamp">
-            Generated at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+            Generated at {pendulum.now().format('YYYY-MM-DD HH:mm:ss z')}
         </div>
     </body>
     </html>

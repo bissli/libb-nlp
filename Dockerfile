@@ -1,5 +1,8 @@
 FROM nvidia/cuda:12.8.0-cudnn-runtime-ubuntu24.04
 
+# Set timezone arg early to avoid cache issues
+ARG TZ=UTC
+
 # Add build arguments
 ARG OPENAI_API_KEY
 ARG ANTHROPIC_API_KEY
@@ -20,9 +23,13 @@ WORKDIR /app
 # Add non-root user early
 RUN useradd -m -s /bin/bash app
 
-# Install system dependencies
-RUN apt-get update && apt-get install software-properties-common -y \
+# Install system dependencies including tzdata
+RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y \
+    tzdata \
+    software-properties-common \
     && add-apt-repository ppa:deadsnakes/ppa -y \
+    && ln -sf /usr/share/zoneinfo/${TZ} /etc/localtime \
+    && echo ${TZ} > /etc/timezone \
     && apt-get update && apt-get install -y \
     python3.11 \
     python3.11-venv \

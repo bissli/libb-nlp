@@ -32,6 +32,24 @@ log_error() {
 
 # Load environment variables (.env takes precedence)
 load_environment() {
+    # Set TZ from system timezone
+    if [ -f /etc/timezone ]; then
+        export TZ=$(cat /etc/timezone)
+    elif [ -f /etc/localtime ] && command -v readlink >/dev/null; then
+        # Try to extract timezone from localtime symlink
+        LOCALTIME_LINK=$(readlink -f /etc/localtime)
+        if [[ $LOCALTIME_LINK =~ zoneinfo/(.+)$ ]]; then
+            export TZ=${BASH_REMATCH[1]}
+        else
+            export TZ="UTC"
+            log_warn "Could not determine system timezone, defaulting to UTC"
+        fi
+    else
+        export TZ="UTC"
+        log_warn "Could not determine system timezone, defaulting to UTC"
+    fi
+    log_info "Using timezone: $TZ"
+
     if [ -f .env ]; then
         # Store current environment
         declare -A orig_env
