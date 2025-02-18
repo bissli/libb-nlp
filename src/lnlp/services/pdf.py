@@ -133,20 +133,6 @@ class PDFTextExtractor:
     CLUSTERING_THRESHOLD = 0.02  # maximum distance for position clustering
     MIN_CLUSTER_SIZE = 2  # minimum number of items to form a cluster
 
-    def __init__(self, pdf_input):
-        """Initialize the PDF text extractor.
-
-        Args:
-            pdf_input: Either a file path (str) or PDF content (bytes)
-        """
-        self.pdf_input = pdf_input if isinstance(pdf_input, str) else BytesIO(pdf_input)
-        self.logger = logging.getLogger(__name__)
-
-        # Document-wide metrics
-        self.doc_metrics = None  # Will store baseline metrics
-        self.doc_flow = None     # Will store document flow analysis
-        self.style_patterns = {}  # Will store detected style patterns
-
     PAGE_NUMBER_PATTERNS = [
         r'^\d+$',
         r'^Page\s+\d+$',
@@ -200,10 +186,12 @@ class PDFTextExtractor:
         self.doc_metrics = None  # Will store baseline metrics
         self.doc_flow = None     # Will store document flow analysis
         self.style_patterns = {}  # Will store detected style patterns
+
         if isinstance(pdf_input, bytes):
             self.pdf_input = BytesIO(pdf_input)
         if isinstance(pdf_input, str):
             self.pdf_input = pdf_input
+
         self.repeated_lines = defaultdict(list)
         self.page_heights = []
         self.font_stats = defaultdict(list)
@@ -886,7 +874,7 @@ class PDFTextExtractor:
             headers, footers = self.detect_headers_footers(pdf.pages)
 
             for page_num, page in enumerate(pdf.pages, 1):
-                self.logger.debug(f'Processing page {page_num}')
+                logger.debug(f'Processing page {page_num}')
 
                 # Extract words with all needed properties
                 words = page.extract_words(

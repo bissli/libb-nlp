@@ -6,23 +6,21 @@ def download_spacy_model(model_name: str) -> None:
     """Download spaCy model if not already present"""
     import spacy
 
-    # Special handling for frozen apps
-    os.environ['SPACY_IS_COMPILED'] = 'true'
-    os.environ['SPACY_DOWNLOAD_NO_RAISE'] = 'true'
-
     # Set up model cache directory in user's home
     cache_dir = Path.home() / '.cache' / 'libb-nlp' / 'spacy'
     os.makedirs(cache_dir, exist_ok=True)
     os.environ['SPACY_DATA_PATH'] = str(cache_dir)
 
     try:
+        # Try to load the model first
         spacy.load(model_name)
     except (OSError, ImportError):
         print(f'Downloading spaCy model {model_name}...')
+        # Use spacy.cli.download() directly
         from spacy.cli import download
-        download(model_name, '--direct', '--no-deps', '--no-cache-dir')
+        download(model_name)
         print('Download complete!')
-        spacy.load(model_name)
+        spacy.load(model_name)  # Verify the model loads
 
 
 def download_sentence_transformer(model_name: str):

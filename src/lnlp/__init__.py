@@ -1,2 +1,3 @@
-from lnlp.splitters import TextSplitterSimilarity, TextSplitterSpacy
-from lnlp.downloaders import download_spacy_model, download_sentence_transformer
+from lnlp.services.downloaders import download_sentence_transformer
+from lnlp.services.downloaders import download_spacy_model
+from lnlp.services.splitters import TextSplitterSimilarity, TextSplitterSpacy

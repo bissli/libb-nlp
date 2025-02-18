@@ -1,17 +1,24 @@
+import logging
 import math
 import os
 import warnings
 from abc import ABC, abstractmethod
+from threading import Lock
 
 import numpy as np
 import regex as re
+import torch
 from langchain.text_splitter import SpacyTextSplitter
-from lnlp.downloaders import download_sentence_transformer
-from lnlp.downloaders import download_spacy_model
+from lnlp.services.downloaders import download_sentence_transformer
+from lnlp.services.downloaders import download_spacy_model
+
+logger = logging.getLogger(__name__)
+
 
 __all__ = [
     'TextSplitterSpacy',
     'TextSplitterSimilarity',
+    'SplitterManager',
 ]
 
 # Performance optimizations
@@ -257,6 +264,55 @@ class TextSplitterSimilarity(BaseTextSplitter):
                    lw=1)
         plt.title('Paragraph Split Points')
         plt.show()
+
+
+class SplitterManager:
+    """Manages text splitter instances."""
+    _instance = None
+    _lock = Lock()
+
+    def __new__(cls):
+        with cls._lock:
+            if cls._instance is None:
+                cls._instance = super().__new__(cls)
+                cls._instance._initialized = False
+            return cls._instance
+
+    def __init__(self):
+        with self._lock:
+            if not self._initialized:
+                self._spacy_splitter = None
+                self._similarity_splitter = None
+                self._initialized = True
+                logger.info('Initialized SplitterManager')
+
+    def get_spacy_splitter(self) -> TextSplitterSpacy:
+        """Get or initialize spaCy splitter instance."""
+        # Use the lock as a memory barrier to ensure thread-safe initialization
+        with self._lock:
+            if self._spacy_splitter is None:
+                self._spacy_splitter = TextSplitterSpacy()
+                logger.info('Initialized spaCy splitter')
+            return self._spacy_splitter
+
+    def get_similarity_splitter(self) -> TextSplitterSimilarity:
+        """Get or initialize similarity splitter instance."""
+        # Use the lock as a memory barrier to ensure thread-safe initialization
+        with self._lock:
+            if self._similarity_splitter is None:
+                self._similarity_splitter = TextSplitterSimilarity()
+                logger.info('Initialized similarity splitter')
+            return self._similarity_splitter
+
+    def health_check(self) -> dict:
+        """Check health status of splitter instances."""
+        return {
+            'spacy': {'loaded': self._spacy_splitter is not None},
+            'similarity': {
+                'loaded': self._similarity_splitter is not None,
+                'gpu_available': torch.cuda.is_available()
+            }
+        }
 
 
 if __name__ == '__main__':

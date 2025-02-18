@@ -1,15 +1,26 @@
-# Libb-NLP Text Splitter
+# Libb-NLP API
 
-A Python library that provides intelligent text splitting capabilities using SpaCy or similarity-based approaches. Choose between CPU-only or GPU-accelerated implementations for optimal performance based on your hardware.
+A comprehensive Python API for Natural Language Processing tasks, providing intelligent text processing capabilities with both CPU and GPU acceleration support.
 
 ## Features
 
-- SpaCy-based splitting with sentence boundary detection
-- Semantic similarity-based splitting using sentence transformers
-- Optional visualization of similarity patterns
-- Configurable chunk sizes and overlap
-- GPU acceleration support for faster processing
-- CPU-only option for systems without GPU
+- Text Processing
+  - Intelligent text splitting using SpaCy or semantic similarity
+  - PDF text extraction with formatting preservation
+  - Configurable chunk sizes and overlap
+  - Visualization of similarity patterns
+
+- AI Integration
+  - OpenAI GPT models integration
+  - Anthropic Claude models support
+  - OpenRouter API compatibility
+  - Unified API for multiple LLM providers
+
+- Hardware Optimization
+  - GPU acceleration support
+  - CPU-only fallback option
+  - Automatic hardware detection
+  - Resource usage monitoring
 
 ## Installation
 
