@@ -28,8 +28,7 @@ The library supports both CPU-only and GPU-accelerated installations. Choose the
 
 ### Prerequisites
 
-- Python 3.9 or higher
-- Poetry package manager
+- Python 3.10 or higher
 - CUDA toolkit 12.1+ (for GPU support)
 
 ### Installation Steps
@@ -42,17 +41,12 @@ cd libb-nlp
 
 2. Run the installation script:
 ```bash
-# Install with automatic GPU detection:
-python install.py
+# Install
+pixi install
 
-# To include test dependencies:
-python install.py --test
+# For Prod
+pixi install.py -e prod
 ```
-
-The installation script accepts the following flag:
-- `-t` or `--test`: Include test dependencies
-
-Note: The script will automatically detect if CUDA/GPU is available and install the appropriate version.
 
 ## Usage
 
@@ -85,21 +79,20 @@ splitter.plot_similarities(text)
 
 There are two ways to use this library in your project:
 
-### Option 1: Direct Poetry Dependency
+### Option 1: Direct Python Package Dependency
 
 Add to your project's `pyproject.toml`:
 ```toml
-[tool.poetry.dependencies]
-libb-nlp = { git = "https://github.com/bissli/libb-nlp.git" }
-
-# For CPU-only version
-torch = { source = "torch_cpu" }
-torchvision = { source = "torch_cpu" }
-
-# OR for GPU version
-torch = { source = "torch_cuda" }
-torchvision = { source = "torch_cuda" }
+[project]
+dependencies = [
+    "libb-nlp @ git+https://github.com/bissli/libb-nlp.git",
+    "torch",
+    "torchvision"
+]
 ```
+
+Note: The torch and torchvision packages will be installed from PyPI. For GPU support,
+ensure you have CUDA toolkit installed on your system.
 
 ### Option 2: Running with Docker
 

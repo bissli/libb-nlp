@@ -1,4 +1,21 @@
-FROM nvidia/cuda:12.8.0-cudnn-runtime-ubuntu24.04
+FROM ghcr.io/prefix-dev/pixi:latest AS build
+
+WORKDIR /app
+
+# Copy installation files
+COPY pyproject.toml pixi.lock ./
+
+# Copy source code
+COPY ./src/lnlp ./lnlp
+
+# Install dependencies and package
+RUN pixi install --locked -e prod
+
+# Create shell-hook script
+RUN pixi shell-hook -e prod > /shell-hook.sh
+RUN echo 'exec "$@"' >> /shell-hook.sh
+
+FROM nvidia/cuda:12.8.0-cudnn-runtime-ubuntu22.04 AS production
 
 # Set timezone arg early to avoid cache issues
 ARG TZ=UTC
@@ -17,63 +34,30 @@ ENV OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
 ENV OPENROUTER_REFERER=${OPENROUTER_REFERER:-http://localhost:8000}
 ENV OPENROUTER_TITLE=${OPENROUTER_TITLE:-"Libb-NLP API"}
 
-# Set working directory
-WORKDIR /app
-
-# Add non-root user early
-RUN useradd -m -s /bin/bash app
-
 # Install system dependencies including tzdata
 RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y \
     tzdata \
-    software-properties-common \
-    && add-apt-repository ppa:deadsnakes/ppa -y \
     && ln -sf /usr/share/zoneinfo/${TZ} /etc/localtime \
     && echo ${TZ} > /etc/timezone \
-    && apt-get update && apt-get install -y \
-    python3.11 \
-    python3.11-venv \
-    python3.11-dev \
-    python3-pip \
-    curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Create and activate virtual environment
-ENV VIRTUAL_ENV=/opt/venv
-RUN python3.11 -m venv $VIRTUAL_ENV
-ENV PATH="$VIRTUAL_ENV/bin:$PATH"
+WORKDIR /app
 
-# Set up cache directory early and set permissions
-RUN mkdir -p /root/.cache/libb-nlp && \
-    chmod -R 777 /root/.cache/libb-nlp && \
-    chown -R app:app /app /root/.cache/libb-nlp
+# Copy environment and entrypoint from build stage
+COPY --from=build /app/.pixi/envs/prod /app/.pixi/envs/prod
+COPY --from=build --chmod=0755 /shell-hook.sh /shell-hook.sh
+COPY --from=build /app/lnlp /app/lnlp
 
-# Copy only dependency files first
-COPY pyproject.toml README.md install.sh ./
+ENV NVIDIA_VISIBLE_DEVICES=all \
+    NVIDIA_DRIVER_CAPABILITIES=compute,utility
 
-# Install Python dependencies
-RUN pip install --no-cache-dir poetry && \
-    poetry config virtualenvs.create false && \
-    chmod +x install.sh && \
-    ./install.sh --gpu
+# Download models after dependencies are installed
+RUN /bin/bash -c "\
+    source /shell-hook.sh && \
+    python -c 'from lnlp.services.downloaders import download_spacy_model, download_sentence_transformer; \
+        download_spacy_model(\"en_core_web_sm\"); \
+        download_sentence_transformer(\"all-mpnet-base-v2\")'"
 
-# Download models before copying application code
-COPY src/lnlp/services/downloaders.py ./lnlp/services/downloaders.py
-RUN mkdir -p ./lnlp/services && \
-    touch ./lnlp/services/__init__.py && \
-    python -c "from lnlp.services.downloaders import download_spacy_model, download_sentence_transformer; \
-    download_spacy_model('en_core_web_sm'); \
-    download_sentence_transformer('all-mpnet-base-v2')"
+ENTRYPOINT ["/bin/bash", "/shell-hook.sh"]
 
-# Now copy application code
-COPY src/lnlp ./lnlp
-
-# Set environment variables
-ENV NVIDIA_VISIBLE_DEVICES=all
-ENV NVIDIA_DRIVER_CAPABILITIES=compute,utility
-
-# Switch to non-root user
-USER app
-
-# Run the application
 CMD ["uvicorn", "lnlp.api.app:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4", "--reload", "--log-level", "info", "--no-use-colors", "--no-access-log"]

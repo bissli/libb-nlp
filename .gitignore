@@ -4,3 +4,6 @@ poetry.lock
 exe/
 .envrc
 .github/workflows/
+# pixi environments
+.pixi
+*.egg-info

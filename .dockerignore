@@ -8,13 +8,8 @@ __pycache__
 *.pyo
 *.pyd
 .Python
-env/
-venv/
 .env
-*.egg-info/
-dist/
-build/
-*.egg
+*.so
 
 # IDE/Editor
 .idea/
@@ -33,12 +28,14 @@ manifest.yaml
 .dockerignore
 Dockerfile
 *.log
-.cache
 tests/
 test/
 .coverage
 htmlcov/
 .pytest_cache/
+
+# Pixi specific
+.pixi/
 
 # Temp files
 *.tmp
