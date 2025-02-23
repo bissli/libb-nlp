@@ -17,7 +17,7 @@ if [ $# -lt 1 ]; then
 fi
 
 STACK_NAME="libb-nlp"
-TEMPLATE_FILE="cf-libb-nlp.yml"
+TEMPLATE_FILE="cf-libb-nlp-gpu.yml"
 
 case "$1" in
     create)
@@ -31,11 +31,10 @@ case "$1" in
                 ParameterKey=VpcId,ParameterValue=${AWS_VPC_ID} \
                 ParameterKey=PrivateSubnet1Id,ParameterValue=${AWS_PRIVATE_1} \
                 ParameterKey=PrivateSubnet2Id,ParameterValue=${AWS_PRIVATE_2} \
+                ParameterKey=IamInstanceProfile,ParameterValue=CloudFormationExecutionRole \
                 ParameterKey=EcrRepository,ParameterValue=${STACK_NAME} \
                 ParameterKey=Region,ParameterValue=us-east-1 \
-                ParameterKey=ImageTag,ParameterValue=latest \
-                ParameterKey=TaskExecutionRole,ParameterValue=${TASK_EXECUTION_ROLE_ARN} \
-                ParameterKey=TaskRole,ParameterValue=${TASK_ROLE_ARN}
+                ParameterKey=ImageTag,ParameterValue=latest
         ;;
 
     update)
@@ -49,11 +48,12 @@ case "$1" in
                 ParameterKey=VpcId,UsePreviousValue=true \
                 ParameterKey=PrivateSubnet1Id,UsePreviousValue=true \
                 ParameterKey=PrivateSubnet2Id,UsePreviousValue=true \
+                ParameterKey=IamInstanceProfile,UsePreviousValue=true \
                 ParameterKey=EcrRepository,UsePreviousValue=true \
                 ParameterKey=ImageTag,UsePreviousValue=true \
+                ParameterKey=InstanceType,UsePreviousValue=true \
                 ParameterKey=Region,UsePreviousValue=true \
-                ParameterKey=TaskExecutionRole,UsePreviousValue=true \
-                ParameterKey=TaskRole,UsePreviousValue=true
+                ParameterKey=ECSGpuAMI,UsePreviousValue=true
         ;;
 
     delete)
