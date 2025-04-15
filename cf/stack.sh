@@ -17,7 +17,7 @@ if [ $# -lt 1 ]; then
 fi
 
 STACK_NAME="libb-nlp"
-TEMPLATE_FILE="cf-libb-nlp.yml"
+TEMPLATE_FILE="cf/cf-libb-nlp.yml"
 
 case "$1" in
     create)
