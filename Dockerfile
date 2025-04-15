@@ -8,7 +8,8 @@ COPY pyproject.toml pixi.lock ./
 # Copy source code
 COPY ./src/lnlp ./lnlp
 
-# Install dependencies and package
+# Install dependencies and package (mock CONDA for pixi)
+ENV CONDA_OVERRIDE_CUDA=12.2
 RUN pixi install --locked -e prod
 
 # Create shell-hook script
