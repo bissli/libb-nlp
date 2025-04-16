@@ -47,7 +47,6 @@ lnlp = { path = "." }
 
 [tool.pixi.feature.test.pypi-dependencies]
 pytest = "*"
-pytest-docker = "*"
 docker = "*"
 bump2version = "*"
 

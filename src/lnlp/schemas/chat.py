@@ -1,3 +1,5 @@
+from typing import Any
+
 from pydantic import BaseModel
 
 
@@ -10,25 +12,25 @@ class ProviderDefaults:
     OPENAI = {
         'max_tokens': 8192,
         'temperature': 0.1,
-        'top_p': 1.0,
-        'frequency_penalty': 0.0,
-        'presence_penalty': 0.0,
+        'top_p': 1.,
+        'frequency_penalty': 0.,
+        'presence_penalty': 0.,
         'stop': []
     }
 
     ANTHROPIC = {
         'max_tokens': 100000,
         'temperature': 0.1,
-        'top_p': 1.0,
+        'top_p': 1.,
         'stop': []
     }
 
     OPENROUTER = {
         'max_tokens': 100000,
         'temperature': 0.1,
-        'top_p': 1.0,
-        'frequency_penalty': 0.0,
-        'presence_penalty': 0.0,
+        'top_p': 1.,
+        'frequency_penalty': 0.,
+        'presence_penalty': 0.,
         'stop': []
     }
 
@@ -57,11 +59,20 @@ class ProviderRequest(BaseModel):
                 raise ValueError(f'Unknown provider: {provider}')
 
 
+class UsageInfo(BaseModel):
+    """Model for the detailed usage information returned by the provider."""
+    prompt_tokens: int
+    completion_tokens: int
+    total_tokens: int
+    prompt_tokens_details: dict[str, Any] | None = None
+    completion_tokens_details: dict[str, Any] | None = None
+
+
 class ProviderResponse(BaseModel):
     id: str
     model: str
     choices: list[dict]
-    usage: dict[str, int]
+    usage: UsageInfo
     created: int
 
 

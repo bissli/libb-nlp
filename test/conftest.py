@@ -1,3 +1,5 @@
+"""Build with ./docker-ops -b before running. Will reuse container.
+"""
 import logging
 import os
 import time
@@ -8,16 +10,20 @@ import pytest
 import requests
 from docker.models.containers import Container
 
-# Construct ECR image name using same env vars as docker-compose
-AWS_ACCOUNT_ID = os.getenv('AWS_ACCOUNT_ID', '123456789')
-AWS_REGION = os.getenv('AWS_REGION', 'us-east-1')
-ECR_REPOSITORY = os.getenv('ECR_REPOSITORY', 'libb-nlp')
-IMAGE_TAG = os.getenv('IMAGE_TAG', 'latest')
-DOCKER_IMAGE = f'{AWS_ACCOUNT_ID}.dkr.ecr.{AWS_REGION}.amazonaws.com/{ECR_REPOSITORY}:{IMAGE_TAG}'
-
 # Configure logging - suppress pdfminer debug logs
 logging.getLogger('pdfminer').setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
+
+
+@pytest.fixture(scope='session')
+def docker_image():
+    """Construct ECR image name using same env vars as docker-compose
+    """
+    AWS_ACCOUNT_ID = os.getenv('AWS_ACCOUNT_ID', '123456789')
+    AWS_REGION = os.getenv('AWS_REGION', 'us-east-1')
+    ECR_REPOSITORY = os.getenv('ECR_REPOSITORY', 'libb-nlp')
+    IMAGE_TAG = os.getenv('IMAGE_TAG', 'latest')
+    return f'{AWS_ACCOUNT_ID}.dkr.ecr.{AWS_REGION}.amazonaws.com/{ECR_REPOSITORY}:{IMAGE_TAG}'
 
 
 @pytest.fixture(scope='session')
@@ -34,30 +40,23 @@ def docker_client() -> docker.DockerClient:
 
 
 @pytest.fixture(scope='session')
-def docker_container(docker_client: docker.DockerClient) -> Generator[Container, None, None]:
+def docker_container(docker_client: docker.DockerClient, docker_image) -> Generator[Container, None, None]:
     """Start the libb-nlp container and wait for it to be ready"""
-    # Clean up any existing containers using port 8000
     try:
-        existing = docker_client.containers.list(
-            filters={'publish': '8000'}
-        )
+        existing = docker_client.containers.list(filters={'publish': '8000'})
         for container in existing:
             container.stop()
             container.remove()
     except Exception as e:
         print(f'Warning: Failed to clean up existing containers: {e}')
 
-    # Build and start container
     container = docker_client.containers.run(
-        DOCKER_IMAGE,
+        docker_image,
         detach=True,
         ports={'8000/tcp': 8000},
-        environment={
-            'ENV': 'test'
-        }
-    )
+        environment={'ENV': 'test'}
+        )
 
-    # Wait for container to be ready
     max_retries = 30
     retry_interval = 1
     session = requests.Session()
@@ -75,6 +74,5 @@ def docker_container(docker_client: docker.DockerClient) -> Generator[Container,
 
     yield container
 
-    # Cleanup
     container.stop()
     container.remove()

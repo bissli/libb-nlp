@@ -42,7 +42,7 @@ def test_chat_completion(docker_container, test_data_dir):
             {'content': transcript}
         ],
         'max_tokens': 100000,
-        'temperature': 0.1
+        'temperature': 0.1,
     }
 
     # Make request
@@ -51,8 +51,8 @@ def test_chat_completion(docker_container, test_data_dir):
         json=request
     )
 
-    # Verify response
-    assert response.status_code == 200
+    if response.status_code != 200:
+        raise AssertionError(response.__dict__)
     result = response.json()
     verify_chat_response(result)
 
