@@ -3,6 +3,7 @@ import time
 from typing import Literal
 
 import httpx
+from lnlp.config import get_settings
 from lnlp.schemas.chat import ProviderRequest, ProviderResponse
 
 logger = logging.getLogger(__name__)
@@ -23,7 +24,6 @@ class LLMProvider:
     }
 
     def __init__(self):
-        from lnlp.core.settings import get_settings
         settings = get_settings()
 
         self.openai_key = settings.openai_api_key
