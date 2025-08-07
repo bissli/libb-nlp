@@ -14,12 +14,16 @@ class LLMProvider:
 
     SUPPORTED_MODELS = {
         'openai': ['openai/o1-mini', 'openai/o3-mini'],
-        'anthropic': ['anthropic/claude-3.5-sonnet'],
+        'anthropic': [
+            'anthropic/claude-3.5-sonnet',
+            'anthropic/claude-sonnnet-4'
+            ],
         'openrouter': [
             'openrouter/openai/o1-mini',
             'openrouter/openai/o3-mini',
             'openrouter/openai/gpt-4o-mini',
-            'openrouter/anthropic/claude-3.5-sonnet'
+            'openrouter/anthropic/claude-3.5-sonnet',
+            'openrouter/anthropic/claude-sonnet-4'
         ]
     }
 
@@ -93,9 +97,7 @@ class LLMProvider:
                 **defaults
             }
             # Override defaults with any specified values
-            for k, v in request.model_dump().items():
-                if k not in {'model', 'messages'} and v is not None:
-                    request_data[k] = v
+            request_data.update({k: v for k, v in request.model_dump().items() if k not in {'model', 'messages'} and v is not None})
             response = await client.post(
                 'https://openrouter.ai/api/v1/chat/completions',
                 headers=headers,

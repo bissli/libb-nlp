@@ -41,6 +41,7 @@ download-models = "python -c 'from lnlp.services.downloaders import download_spa
 lnlp = { path = ".", editable = true }
 pip = "*"
 pdfplumber = "*"
+hf_xet = "*"
 
 [tool.pixi.feature.prod.pypi-dependencies]
 lnlp = { path = "." }
