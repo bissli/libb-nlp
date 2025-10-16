@@ -8,7 +8,7 @@ def download_spacy_model(model_name: str) -> None:
 
     # Set up model cache directory in user's home
     cache_dir = Path.home() / '.cache' / 'libb-nlp' / 'spacy'
-    os.makedirs(cache_dir, exist_ok=True)
+    Path(cache_dir).mkdir(exist_ok=True, parents=True)
     os.environ['SPACY_DATA_PATH'] = str(cache_dir)
 
     try:
@@ -29,7 +29,7 @@ def download_sentence_transformer(model_name: str):
 
     # Set up model cache directory in user's home
     cache_dir = Path.home() / '.cache' / 'libb-nlp' / 'models'
-    os.makedirs(cache_dir, exist_ok=True)
+    Path(cache_dir).mkdir(exist_ok=True, parents=True)
     os.environ['SENTENCE_TRANSFORMERS_HOME'] = str(cache_dir)
 
     # Initialize model with download handling

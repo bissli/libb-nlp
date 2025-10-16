@@ -1,8 +1,8 @@
 import asyncio
 
-from fastapi import APIRouter, File, HTTPException, Query, UploadFile, Depends
-from lnlp.schemas.extract import PDFResponse
+from fastapi import APIRouter, File, HTTPException, Query, UploadFile
 from lnlp.api.deps import get_pdf_extractor
+from lnlp.schemas.extract import PDFResponse
 
 router = APIRouter()
 

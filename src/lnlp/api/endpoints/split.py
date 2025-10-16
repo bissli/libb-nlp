@@ -1,6 +1,6 @@
 import asyncio
 
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException
 from lnlp.api.deps import get_splitter_manager
 from lnlp.schemas.split import SimilarityRequest, SpacyRequest, TextResponse
 

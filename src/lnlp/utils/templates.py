@@ -114,8 +114,8 @@ def render_metrics_report(metrics_data: dict) -> str:
 
         <script>
             Highcharts.chart('resourceChart', {{
-                chart: {{ 
-                    type: 'line', 
+                chart: {{
+                    type: 'line',
                     zoomType: 'x'
                 }},
                 time: {{
