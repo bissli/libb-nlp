@@ -1,25 +1,37 @@
-FROM ghcr.io/prefix-dev/pixi:latest AS build
+FROM nvidia/cuda:12.8.0-cudnn-runtime-ubuntu22.04 AS build
+
+# Set timezone arg early
+ARG TZ=America/New_York
+
+# Install system dependencies including Python
+RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y \
+    python3.11 \
+    python3.11-venv \
+    python3-pip \
+    && ln -sf /usr/bin/python3.11 /usr/bin/python \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-# Copy installation files
-COPY pyproject.toml pixi.lock ./
+# Install Poetry
+RUN pip install --no-cache-dir poetry==2.2.0
 
-# Copy source code
+# Configure Poetry to create venv in project
+RUN poetry config virtualenvs.in-project true
+
+# Copy dependency files first (better caching)
+COPY pyproject.toml poetry.lock README.md ./
+
+# Install dependencies (poetry creates .venv automatically)
+RUN poetry install --only main --no-interaction --no-ansi --no-root
+
+# Copy source code (but don't install package yet - will install in production)
 COPY ./src/lnlp ./lnlp
-
-# Install dependencies and package (mock CONDA for pixi)
-ENV CONDA_OVERRIDE_CUDA=12.2
-RUN pixi install --locked -e prod
-
-# Create shell-hook script
-RUN pixi shell-hook -e prod > /shell-hook.sh
-RUN echo 'exec "$@"' >> /shell-hook.sh
 
 FROM nvidia/cuda:12.8.0-cudnn-runtime-ubuntu22.04 AS production
 
 # Set timezone arg early to avoid cache issues
-ARG TZ=UTC
+ARG TZ=America/New_York
 
 # Add build arguments
 ARG OPENAI_API_KEY
@@ -29,36 +41,42 @@ ARG OPENROUTER_REFERER
 ARG OPENROUTER_TITLE
 
 # Set environment variables
-ENV OPENAI_API_KEY=${OPENAI_API_KEY}
-ENV ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
-ENV OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
-ENV OPENROUTER_REFERER=${OPENROUTER_REFERER:-http://localhost:8000}
-ENV OPENROUTER_TITLE=${OPENROUTER_TITLE:-"Libb-NLP API"}
+ENV OPENAI_API_KEY=${OPENAI_API_KEY} \
+    ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY} \
+    OPENROUTER_API_KEY=${OPENROUTER_API_KEY} \
+    OPENROUTER_REFERER=${OPENROUTER_REFERER:-http://localhost:8000} \
+    OPENROUTER_TITLE=${OPENROUTER_TITLE:-"Libb-NLP API"} \
+    PYTHONUNBUFFERED=1
 
-# Install system dependencies including tzdata
+# Install system dependencies including Python and tzdata
 RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y \
+    python3.11 \
+    python3.11-venv \
+    python3-pip \
     tzdata \
     && ln -sf /usr/share/zoneinfo/${TZ} /etc/localtime \
     && echo ${TZ} > /etc/timezone \
+    && ln -sf /usr/bin/python3.11 /usr/bin/python \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-# Copy environment and entrypoint from build stage
-COPY --from=build /app/.pixi/envs/prod /app/.pixi/envs/prod
-COPY --from=build --chmod=0755 /shell-hook.sh /shell-hook.sh
+# Copy virtual environment from build stage
+COPY --from=build /app/.venv /app/.venv
+COPY --from=build /app/pyproject.toml /app/README.md /app/
 COPY --from=build /app/lnlp /app/lnlp
 
-ENV NVIDIA_VISIBLE_DEVICES=all \
+# Use virtual environment
+ENV PATH="/app/.venv/bin:$PATH" \
+    NVIDIA_VISIBLE_DEVICES=all \
     NVIDIA_DRIVER_CAPABILITIES=compute,utility
 
-# Download models after dependencies are installed
-RUN /bin/bash -c "\
-    source /shell-hook.sh && \
-    python -c 'from lnlp.services.downloaders import download_spacy_model, download_sentence_transformer; \
-        download_spacy_model(\"en_core_web_sm\"); \
-        download_sentence_transformer(\"all-mpnet-base-v2\")'"
+# Install the package in production environment
+RUN /app/.venv/bin/pip install --no-deps -e /app
 
-ENTRYPOINT ["/bin/bash", "/shell-hook.sh"]
+# Download models (separate layer for caching)
+RUN /app/.venv/bin/python -c 'from lnlp.services.downloaders import download_spacy_model, download_sentence_transformer; \
+    download_spacy_model("en_core_web_sm"); \
+    download_sentence_transformer("all-mpnet-base-v2")'
 
-CMD ["uvicorn", "lnlp.api.app:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4", "--reload", "--log-level", "info", "--no-use-colors", "--no-access-log"]
+CMD ["/app/.venv/bin/python", "-m", "uvicorn", "lnlp.api.app:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4", "--log-level", "info", "--no-use-colors", "--no-access-log"]

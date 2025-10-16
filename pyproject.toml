@@ -1,23 +1,15 @@
-[project]
+[tool.poetry]
 name = "lnlp"
 version = "0.1.0"
 description = "A comprehensive Python API for Natural Language Processing tasks"
-authors = [
-  { name = "bissli", email = "bissli.xyz@protonmail.com" },
-]
-license = { text = "MIT" }
-requires-python = ">=3.11"
+authors = ["bissli <bissli.xyz@protonmail.com>"]
+readme = "README.md"
+license = "MIT"
 
-[tool.pixi.project]
-channels = ["conda-forge"]
-platforms = ["linux-64", "win-64"]
-
-[tool.pixi.system-requirements]
-cuda = "12.2"
-
-[tool.pixi.dependencies]
-pytorch-gpu = "*"
-torchvision = "*"
+[tool.poetry.dependencies]
+python = ">=3.11,<3.14.0"
+torch = { version = ">=2.0.0,<3.0.0", source = "pytorch-cu118" }
+torchvision = { version = "*", source = "pytorch-cu118" }
 sentence-transformers = ">=3.4.1,<4"
 spacy = ">=3.8.2,<4"
 langchain = ">=0.3.17,<1"
@@ -32,32 +24,21 @@ openai = ">=1.63.2,<2"
 seaborn = ">=0.13.2,<1"
 pendulum = ">=3.0.0,<4"
 psutil = ">=6.1.1,<7"
-
-[tool.pixi.tasks]
-start = "uvicorn lnlp.api.app:app --host 0.0.0.0 --port 8000 --reload --log-level info"
-download-models = "python -c 'from lnlp.services.downloaders import download_spacy_model, download_sentence_transformer; download_spacy_model(\"en_core_web_sm\"); download_sentence_transformer(\"all-mpnet-base-v2\")'"
-
-[tool.pixi.pypi-dependencies]
-lnlp = { path = ".", editable = true }
-pip = "*"
 pdfplumber = "*"
 hf_xet = "*"
+numpy = "*"
+regex = "*"
 
-[tool.pixi.feature.prod.pypi-dependencies]
-lnlp = { path = "." }
-
-[tool.pixi.feature.test.pypi-dependencies]
+[tool.poetry.group.dev.dependencies]
 pytest = "*"
 docker = "*"
 bump2version = "*"
 
-[tool.pixi.feature.test.tasks]
-test = "pytest --md=report.md"
-
-[tool.pixi.environments]
-default = { features = ["test"], solve-group = "prod" }
-prod = { features = ["prod"], solve-group = "prod" }
+[[tool.poetry.source]]
+name = "pytorch-cu118"
+url = "https://download.pytorch.org/whl/cu118"
+priority = "explicit"
 
 [build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
