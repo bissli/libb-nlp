@@ -9,6 +9,7 @@ import docker
 import pytest
 import requests
 from docker.models.containers import Container
+import pathlib
 
 # Configure logging - suppress pdfminer debug logs
 logging.getLogger('pdfminer').setLevel(logging.WARNING)
@@ -30,7 +31,15 @@ def docker_image():
 def test_data_dir():
     """Return the directory containing test data files
     """
-    return os.path.join(os.path.dirname(__file__), 'data')
+    return os.path.join(pathlib.Path(__file__).parent, 'data')
+
+
+@pytest.fixture(scope='session', autouse=True)
+def suppress_third_party_warnings():
+    """Suppress known warnings from third-party libraries"""
+    import warnings
+    warnings.filterwarnings('ignore', category=DeprecationWarning, module='pysbd')
+    warnings.filterwarnings('ignore', message="Can't initialize NVML", module='torch.cuda')
 
 
 @pytest.fixture(scope='session')
