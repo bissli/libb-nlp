@@ -1,6 +1,4 @@
-"""Build with ./docker-ops -b before running. Will reuse container.
-"""
-import logging
+"""Docker-related test fixtures."""
 import os
 import time
 from collections.abc import Generator
@@ -9,11 +7,6 @@ import docker
 import pytest
 import requests
 from docker.models.containers import Container
-import pathlib
-
-# Configure logging - suppress pdfminer debug logs
-logging.getLogger('pdfminer').setLevel(logging.WARNING)
-logger = logging.getLogger(__name__)
 
 
 @pytest.fixture(scope='session')
@@ -28,21 +21,6 @@ def docker_image():
 
 
 @pytest.fixture(scope='session')
-def test_data_dir():
-    """Return the directory containing test data files
-    """
-    return os.path.join(pathlib.Path(__file__).parent, 'data')
-
-
-@pytest.fixture(scope='session', autouse=True)
-def suppress_third_party_warnings():
-    """Suppress known warnings from third-party libraries"""
-    import warnings
-    warnings.filterwarnings('ignore', category=DeprecationWarning, module='pysbd')
-    warnings.filterwarnings('ignore', message="Can't initialize NVML", module='torch.cuda')
-
-
-@pytest.fixture(scope='session')
 def docker_client() -> docker.DockerClient:
     """Create a Docker client"""
     return docker.from_env()
@@ -50,7 +28,11 @@ def docker_client() -> docker.DockerClient:
 
 @pytest.fixture(scope='session')
 def docker_container(docker_client: docker.DockerClient, docker_image) -> Generator[Container, None, None]:
-    """Start the libb-nlp container and wait for it to be ready"""
+    """Start the libb-nlp container and wait for it to be ready.
+
+    Only used by API tests in test_api.py.
+    Local tests in test_pdf.py and test_splitters.py don't need this.
+    """
     try:
         existing = docker_client.containers.list(filters={'publish': '8000'})
         for container in existing:
@@ -63,8 +45,13 @@ def docker_container(docker_client: docker.DockerClient, docker_image) -> Genera
         docker_image,
         detach=True,
         ports={'8000/tcp': 8000},
-        environment={'ENV': 'test'}
-        )
+        environment={
+            'ENV': 'test',
+            'OPENROUTER_API_KEY': os.getenv('OPENROUTER_API_KEY'),
+            'OPENROUTER_REFERER': os.getenv('OPENROUTER_REFERER', 'http://localhost:8000'),
+            'OPENROUTER_TITLE': os.getenv('OPENROUTER_TITLE', 'Libb-NLP API'),
+        }
+    )
 
     max_retries = 30
     retry_interval = 1

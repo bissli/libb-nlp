@@ -9,11 +9,13 @@ import torch
 logger = logging.getLogger(__name__)
 
 
-class HealthService:
-    """Simple health check service"""
+class DashboardService:
+    """Service for system dashboard with health checks and metrics.
+    """
 
     def check_gpu(self) -> dict:
-        """Check GPU status"""
+        """Check GPU status.
+        """
         gpu_info = {
             'available': torch.cuda.is_available(),
             'cuda_version': None,
@@ -25,12 +27,10 @@ class HealthService:
             }
         }
 
-        # Check if PyTorch was built with CUDA
         if hasattr(torch, 'version') and hasattr(torch.version, 'cuda'):
             gpu_info['cuda_version'] = torch.version.cuda
 
         try:
-            # Check NVIDIA driver info
             import subprocess
             result = subprocess.run(
                 ['nvidia-smi'],
@@ -41,20 +41,17 @@ class HealthService:
             )
             if result.returncode == 0:
                 gpu_info['driver_info'] = result.stdout.strip()
+            else:
+                gpu_info['driver_info'] = f'nvidia-smi returned error code {result.returncode}'
 
-                # Additional diagnostics if GPU is detected but not available to PyTorch
-                if not gpu_info['available'] and gpu_info['driver_info']:
-                    # Check if PyTorch can see CUDA at all
+            if not gpu_info['available'] and gpu_info.get('driver_info'):
                     gpu_info['cuda_built'] = hasattr(torch, 'cuda')
 
-                    # Check if CUDA is in the Python path
                     import sys
                     cuda_in_path = any('cuda' in p.lower() for p in sys.path)
                     gpu_info['cuda_in_path'] = cuda_in_path
 
-                    # Try to import CUDA toolkit
                     try:
-                        import torch.cuda
                         gpu_info['cuda_import'] = True
                         try:
                             torch.cuda.init()
@@ -66,7 +63,6 @@ class HealthService:
                         gpu_info['cuda_import'] = False
                         gpu_info['cuda_import_error'] = str(e)
 
-                    # Check PyTorch build info
                     gpu_info['torch_config'] = {
                         'is_cuda_available': torch.cuda.is_available(),
                         'cuda_version': torch.version.cuda if hasattr(torch.version, 'cuda') else None,
@@ -82,9 +78,9 @@ class HealthService:
                     'count': torch.cuda.device_count(),
                     'current_device': torch.cuda.current_device(),
                     'device_name': torch.cuda.get_device_name(0),
-                    'memory_allocated': torch.cuda.memory_allocated(0) / 1024**2,  # MB
-                    'memory_reserved': torch.cuda.memory_reserved(0) / 1024**2,  # MB
-                    'max_memory_allocated': torch.cuda.max_memory_allocated(0) / 1024**2,  # MB
+                    'memory_allocated': torch.cuda.memory_allocated(0) / 1024**2,
+                    'memory_reserved': torch.cuda.memory_reserved(0) / 1024**2,
+                    'max_memory_allocated': torch.cuda.max_memory_allocated(0) / 1024**2,
                 })
             except Exception as e:
                 logger.error(f'Error getting detailed GPU info: {e}')
@@ -94,7 +90,8 @@ class HealthService:
         return gpu_info
 
     def check_system(self) -> dict:
-        """Check system resources"""
+        """Check system resources.
+        """
         try:
             import subprocess
             nvidia_smi = subprocess.run(['nvidia-smi'], capture_output=True, text=True, check=False)
@@ -112,26 +109,26 @@ class HealthService:
                 'healthy': psutil.virtual_memory().percent < 85.0
             },
             'disk': {
-                'total': shutil.disk_usage('/').total / (1024**3),  # GB
-                'used': shutil.disk_usage('/').used / (1024**3),    # GB
-                'free': shutil.disk_usage('/').free / (1024**3),    # GB
+                'total': shutil.disk_usage('/').total / (1024**3),
+                'used': shutil.disk_usage('/').used / (1024**3),
+                'free': shutil.disk_usage('/').free / (1024**3),
                 'usage_percent': (shutil.disk_usage('/').used / shutil.disk_usage('/').total) * 100,
                 'healthy': (shutil.disk_usage('/').used / shutil.disk_usage('/').total) < 0.85
             },
             'gpu': {
                 'available': torch.cuda.is_available(),
                 'driver_info': gpu_info,
-                'memory_used': torch.cuda.memory_allocated() / 1024**2 if torch.cuda.is_available() else 0,  # MB
-                'memory_total': torch.cuda.get_device_properties(0).total_memory / 1024**2 if torch.cuda.is_available() else 0  # MB
+                'memory_used': torch.cuda.memory_allocated() / 1024**2 if torch.cuda.is_available() else 0,
+                'memory_total': torch.cuda.get_device_properties(0).total_memory / 1024**2 if torch.cuda.is_available() else 0
             }
         }
 
     def check_services(self, app) -> dict:
-        """Check critical service health with detailed diagnostics"""
+        """Check critical service health with detailed diagnostics.
+        """
         services_status = {}
 
         try:
-            # Check splitter manager
             if hasattr(app.state, 'splitter_manager'):
                 splitter_health = app.state.splitter_manager.health_check()
                 services_status['splitter_manager'] = {
@@ -154,7 +151,6 @@ class HealthService:
                     'error': 'Splitter manager not initialized'
                 }
 
-            # Check LLM provider
             if hasattr(app.state, 'provider'):
                 provider = app.state.provider
                 if provider is None:
@@ -163,17 +159,12 @@ class HealthService:
                         'error': 'Provider not initialized'
                     }
                 else:
-                    api_keys = {
-                        'openai': bool(provider.openai_key),
-                        'anthropic': bool(provider.anthropic_key),
-                        'openrouter': bool(provider.openrouter_key)
-                    }
+                    has_openrouter = bool(provider.openrouter_key)
                     services_status['provider'] = {
-                        'healthy': any(api_keys.values()),
+                        'healthy': has_openrouter,
                         'details': {
-                            'available_providers': [k for k, v in api_keys.items() if v],
-                            'missing_providers': [k for k, v in api_keys.items() if not v],
-                            'error': None if any(api_keys.values()) else 'No API keys configured'
+                            'openrouter_configured': has_openrouter,
+                            'error': None if has_openrouter else 'OpenRouter API key not configured'
                         }
                     }
             else:
@@ -188,8 +179,9 @@ class HealthService:
 
         return services_status
 
-    def get_health_report(self, app) -> dict[str, Any]:
-        """Generate comprehensive health report"""
+    def get_dashboard_data(self, app) -> dict[str, Any]:
+        """Generate comprehensive dashboard data.
+        """
         system_status = self.check_system()
         services_status = self.check_services(app)
 
@@ -200,5 +192,4 @@ class HealthService:
         }
 
 
-# Singleton instance
-health_service = HealthService()
+dashboard_service = DashboardService()

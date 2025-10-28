@@ -10,28 +10,21 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from lnlp.api.endpoints import chat, extract, split
 from lnlp.services.provider import LLMProvider
 from lnlp.services.splitters import SplitterManager
-from lnlp.utils.health import health_service
+from lnlp.utils.dashboard import dashboard_service
 from lnlp.utils.metrics import metrics_service
-from lnlp.utils.templates import render_health_report, render_metrics_report
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.base import BaseHTTPMiddleware
 
 logger = logging.getLogger(__name__)
 
 
-# Middleware to track endpoint metrics
 class MetricsMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         start_time = time.time()
         response = await call_next(request)
         duration = time.time() - start_time
 
-        # Record metric
-        metrics_service.track_request(
-            path=request.url.path,
-            method=request.method,
-            duration=duration
-        )
+        metrics_service.track_request(path=request.url.path, method=request.method, duration=duration)
 
         return response
 
@@ -134,14 +127,19 @@ async def general_exception_handler(request, exc):
     )
 
 
-@app.get('/metrics', response_class=HTMLResponse)
-def metrics():
-    """Get application metrics as HTML report"""
-    return render_metrics_report(metrics_service.get_metrics())
+@app.get('/', response_class=HTMLResponse)
+def dashboard():
+    """Get system dashboard with health and metrics.
+    """
+    from lnlp.utils.templates import render_dashboard
+
+    dashboard_data = dashboard_service.get_dashboard_data(app)
+    metrics_data = metrics_service.get_metrics()
+    return render_dashboard(dashboard_data, metrics_data)
 
 
-@app.get('/health', response_class=HTMLResponse)
+@app.get('/health')
 def health_check():
-    """Get health status as HTML report"""
-    health_data = health_service.get_health_report(app)
-    return render_health_report(health_data)
+    """Simple health check for AWS load balancer.
+    """
+    return {'status': 'ok'}

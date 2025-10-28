@@ -14,40 +14,33 @@ async def query(
     request: ProviderRequest,
     provider: LLMProvider = Depends(get_provider)
 ):
-    """Endpoint for GPT-style completions through various providers.
+    """Endpoint for GPT-style completions with automatic parameter optimization.
+
+    The API automatically sets optimal parameters based on the model:
+    - Temperature: 0.1 (fixed for consistency)
+    - Max tokens: Model's context_length (override with max_tokens parameter)
 
     Example request:
         ```python
         response = requests.post(
             'http://localhost:8000/chat/query',
             json={
-            'model': 'openrouter/openai/gpt-4o-mini',
-            'messages': [
-                {'content': 'prompt text'}
-            ],
-            'max_tokens': 100000,
-            'temperature': 0.1
-        })
+                'model': 'openrouter/openai/gpt-4o-mini',
+                'messages': [{'content': 'prompt text'}]
+            }
+        )
         ```
     """
-    # Log the request (excluding prompt content)
-    logger.info(
-        'Chat completion request - Model: %s, Options: %s',
-        request.model,
-        {
-            'max_tokens': request.max_tokens,
-            'temperature': request.temperature,
-            'top_p': request.top_p,
-            'frequency_penalty': request.frequency_penalty,
-            'presence_penalty': request.presence_penalty,
-            'stop': request.stop
-        }
-    )
+    total_chars = sum(len(m.content) for m in request.messages)
+    logger.info(f'Chat query request - Model: {request.model}, Messages: {len(request.messages)}, '
+                f'Total chars: {total_chars:,}, max_tokens: {request.max_tokens or "auto"}')
+
     try:
         return await provider.query(request)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
+        logger.error(f'Chat query error: {e}')
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -55,14 +48,14 @@ async def query(
 async def list_available_models(
     provider: LLMProvider = Depends(get_provider)
 ):
-    """List available models across all providers"""
-    available_models = provider.get_available_models()
+    """List available models with context lengths"""
+    available_models = await provider.get_available_models()
     return [
         ModelInfo(
-            name=model,
-            provider=model.split('/')[0] if '/' in model else 'openai',
-            max_tokens=None,
+            name=model_name,
+            provider=model_name.split('/')[0] if '/' in model_name else 'openai',
+            context_length=context_length,
             features=['chat']
         )
-        for model in available_models
+        for model_name, context_length in available_models
     ]

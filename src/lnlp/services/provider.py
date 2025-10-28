@@ -1,197 +1,213 @@
 import logging
-import time
-from typing import Literal
+import re
 
-import httpx
 from lnlp.config import get_settings
 from lnlp.schemas.chat import ProviderRequest, ProviderResponse
+from openai import AsyncOpenAI
 
 logger = logging.getLogger(__name__)
 
 
 class LLMProvider:
-    """Unified provider for LLM API access"""
+    """Unified provider for LLM API access with automatic parameter optimization"""
 
-    SUPPORTED_MODELS = {
-        'openai': ['openai/o1-mini', 'openai/o3-mini'],
-        'anthropic': [
-            'anthropic/claude-3.5-sonnet',
-            'anthropic/claude-sonnnet-4'
-            ],
-        'openrouter': [
-            'openrouter/openai/o1-mini',
-            'openrouter/openai/o3-mini',
-            'openrouter/openai/gpt-4o-mini',
-            'openrouter/anthropic/claude-3.5-sonnet',
-            'openrouter/anthropic/claude-sonnet-4'
-        ]
-    }
+    _models_cache = None
+    DEFAULT_TEMPERATURE = 0.1
 
     def __init__(self):
         settings = get_settings()
 
-        self.openai_key = settings.openai_api_key
-        self.anthropic_key = settings.anthropic_api_key
         self.openrouter_key = settings.openrouter_api_key
         self.openrouter_referer = settings.openrouter_referer
         self.openrouter_title = settings.openrouter_title
 
-        if not any([self.openai_key, self.anthropic_key, self.openrouter_key]):
-            logger.warning('No API keys configured - LLM features will be unavailable')
+        if not self.openrouter_key:
+            logger.warning('OpenRouter API key not configured - LLM features will be unavailable')
 
-    def _strip_provider_prefix(self, model: str, provider: str) -> str:
-        """Remove provider prefix from model name if present"""
-        return model.replace(f'{provider}/', '')
+    def _strip_openrouter_prefix(self, model: str) -> str:
+        """Remove openrouter/ prefix from model name if present"""
+        if model.startswith('openrouter/'):
+            return model.replace('openrouter/', '', 1)
+        return model
 
-    def _get_provider_for_model(self, model: str) -> Literal['openai', 'anthropic', 'openrouter']:
-        """Determine which provider to use based on model name prefix"""
-        provider = model.split('/')[0]
-
-        # Map of providers to their API keys
-        provider_keys = {
-            'openrouter': self.openrouter_key,
-            'openai': self.openai_key,
-            'anthropic': self.anthropic_key
-        }
-
-        if provider not in provider_keys:
-            raise ValueError(f'Unknown provider: {provider}')
-
-        if not provider_keys[provider]:
-            raise ValueError(f'{provider.title()} API key not configured')
-
-        return provider
+    async def _get_model_info(self, model: str) -> dict | None:
+        """Get model information from OpenRouter API"""
+        models = await self._fetch_openrouter_models()
+        for model_info in models:
+            if model_info['id'] == model:
+                return model_info
+        return None
 
     async def query(self, request: ProviderRequest) -> ProviderResponse:
-        """Send chat completion request to appropriate provider"""
-        provider = self._get_provider_for_model(request.model)
+        """Send chat completion request to OpenRouter with optimized parameters"""
+        if not self.openrouter_key:
+            raise ValueError('OpenRouter API key not configured')
 
-        match provider:
-            case 'openrouter':
-                return await self._openrouter_completion(request)
-            case 'openai':
-                return await self._openai_completion(request)
-            case 'anthropic':
-                return await self._anthropic_completion(request)
-            case _:
-                raise ValueError(f'Unknown provider: {provider}')
+        total_chars = sum(len(m.content) for m in request.messages)
+        estimated_tokens = total_chars // 4
+        logger.info(f'Query request - Model: {request.model}, Messages: {len(request.messages)}, '
+                    f'Total chars: {total_chars:,}, Estimated tokens: {estimated_tokens:,}')
+
+        return await self._openrouter_completion(request)
 
     async def _openrouter_completion(self, request: ProviderRequest) -> ProviderResponse:
-        """Handle OpenRouter API requests"""
-        headers = {
-            'HTTP-Referer': self.openrouter_referer,
-            'X-Title': self.openrouter_title,
-            'Authorization': f'Bearer {self.openrouter_key}'
-        }
+        """Handle OpenRouter API requests with automatic parameter optimization"""
+        model = self._strip_openrouter_prefix(request.model)
 
-        # Strip provider prefix from model
-        model = self._strip_provider_prefix(request.model, 'openrouter')
+        model_info = await self._get_model_info(model)
+        if not model_info:
+            logger.warning(f'Could not fetch model info for {model}, using defaults')
 
-        async with httpx.AsyncClient() as client:
-            # Get provider defaults and override with any specified values
-            defaults = request.get_defaults()
-            messages = [{'role': 'user', 'content': m.content} for m in request.messages]
-            request_data = {
-                'model': model,
-                'messages': messages,
-                **defaults
-            }
-            # Override defaults with any specified values
-            request_data.update({k: v for k, v in request.model_dump().items() if k not in {'model', 'messages'} and v is not None})
-            response = await client.post(
-                'https://openrouter.ai/api/v1/chat/completions',
-                headers=headers,
-                json=request_data
-            )
-            response.raise_for_status()
-            data = response.json()
-
-            return ProviderResponse(**data)
-
-    async def _openai_completion(self, request: ProviderRequest) -> ProviderResponse:
-        """Handle OpenAI API requests"""
-        from openai import AsyncOpenAI
-
-        # Strip provider prefix and create base params
-        model = self._strip_provider_prefix(request.model, 'openai')
         params = {
             'model': model,
             'messages': [{'role': 'user', 'content': m.content} for m in request.messages],
+            'temperature': self.DEFAULT_TEMPERATURE,
         }
 
-        # Add optional parameters only if they are not None
-        optional_params = {
-            'max_tokens': request.max_tokens,
-            'temperature': request.temperature,
-            'top_p': request.top_p,
-            'frequency_penalty': request.frequency_penalty,
-            'presence_penalty': request.presence_penalty,
-            'stop': request.stop
-        }
+        if request.max_tokens is not None:
+            params['max_tokens'] = request.max_tokens
+        elif model_info and model_info.get('context_length'):
+            params['max_tokens'] = model_info['context_length']
 
-        # Add only non-None optional parameters
-        params.update({k: v for k, v in optional_params.items() if v is not None})
+        logger.debug(f'Querying {model} with params: temperature={params["temperature"]}, '
+                     f'max_tokens={params.get("max_tokens", "unspecified")}')
 
-        client = AsyncOpenAI(api_key=self.openai_key)
+        client = AsyncOpenAI(
+            api_key=self.openrouter_key,
+            base_url='https://openrouter.ai/api/v1',
+            default_headers={
+                'HTTP-Referer': self.openrouter_referer,
+                'X-Title': self.openrouter_title
+            }
+        )
         response = await client.chat.completions.create(**params)
 
         return ProviderResponse(
             id=response.id,
             model=response.model,
-            choices=[choice.dict() for choice in response.choices],
-            usage=response.usage.dict(),
+            choices=[choice.model_dump() for choice in response.choices],
+            usage=response.usage.model_dump(),
             created=response.created
         )
 
-    async def _anthropic_completion(self, request: ProviderRequest) -> ProviderResponse:
-        """Handle Anthropic API requests"""
-        from anthropic import AsyncAnthropic
+    async def _fetch_openrouter_models(self) -> list[dict]:
+        """Fetch available models from OpenRouter API with caching"""
 
-        # Strip provider prefix and create base params
-        model = self._strip_provider_prefix(request.model, 'anthropic')
-        params = {
-            'model': model,
-            'messages': [{'role': 'user', 'content': m.content} for m in request.messages],
-        }
+        if self._models_cache is not None:
+            return self._models_cache
 
-        # Add optional parameters only if they are not None
-        optional_params = {
-            'max_tokens': request.max_tokens,
-            'temperature': request.temperature,
-            'top_p': request.top_p,
-            'stop_sequences': request.stop
-        }
+        if not self.openrouter_key:
+            logger.warning('OpenRouter API key not configured - cannot fetch models')
+            return []
 
-        # Add only non-None optional parameters
-        params.update({k: v for k, v in optional_params.items() if v is not None})
-
-        client = AsyncAnthropic(api_key=self.anthropic_key)
-        response = await client.messages.create(**params)
-
-        return ProviderResponse(
-            id=response.id,
-            model=request.model,
-            choices=[{
-                'message': {
-                    'role': response.role,
-                    'content': response.content
-                },
-                'finish_reason': response.stop_reason
-            }],
-            usage={
-                'prompt_tokens': response.usage.input_tokens,
-                'completion_tokens': response.usage.output_tokens
-            },
-            created=int(time.time())
+        client = AsyncOpenAI(
+            api_key=self.openrouter_key,
+            base_url='https://openrouter.ai/api/v1',
+            default_headers={
+                'HTTP-Referer': self.openrouter_referer,
+                'X-Title': self.openrouter_title
+            }
         )
 
-    def get_available_models(self) -> list[str]:
-        """Get list of available models based on configured API keys"""
-        models = []
-        if self.openrouter_key:
-            models.extend(self.SUPPORTED_MODELS['openrouter'])
-        if self.openai_key:
-            models.extend(self.SUPPORTED_MODELS['openai'])
-        if self.anthropic_key:
-            models.extend(self.SUPPORTED_MODELS['anthropic'])
-        return models
+        models_response = await client.models.list()
+        self._models_cache = [model.dict() for model in models_response.data]
+
+        logger.debug(f'Fetched {len(self._models_cache)} models from OpenRouter API')
+        return self._models_cache
+
+    async def get_available_models(self) -> list[tuple[str, int | None]]:
+        """Get list of available models with context lengths from OpenRouter"""
+        if not self.openrouter_key:
+            logger.warning('OpenRouter API key not configured - no models available')
+            return []
+
+        try:
+            openrouter_models = await self._fetch_openrouter_models()
+            return [
+                (f"openrouter/{model['id']}", model.get('context_length'))
+                for model in openrouter_models
+            ]
+        except Exception as e:
+            logger.error(f'Failed to fetch OpenRouter models: {e}')
+            return []
+
+    async def extract_ticker(self, text: str) -> tuple[str | None, str | None]:
+        """Extract company ticker symbol from source text using LLM.
+
+        Args
+            text: Source text to extract ticker from (e.g., earnings transcript)
+
+        Returns
+            Tuple of (ticker_symbol, company_name)
+        """
+        if not self.openrouter_key:
+            raise ValueError('OpenRouter API key required for ticker extraction')
+
+        logger.info(f'Ticker extraction - Input text length: {len(text):,} chars, '
+                    f'Estimated tokens: {len(text) // 4:,}')
+
+        settings = get_settings()
+
+        client = AsyncOpenAI(
+            api_key=self.openrouter_key,
+            base_url='https://openrouter.ai/api/v1',
+            default_headers={
+                'HTTP-Referer': self.openrouter_referer,
+                'X-Title': self.openrouter_title
+            }
+        )
+
+        company_name_prompt = """Extract only the company name from this earnings transcript.
+Reply with just the company name, nothing else. No explanations."""
+
+        try:
+            response = await client.chat.completions.create(
+                model=settings.ticker_extraction_name_model,
+                messages=[{'role': 'user', 'content': f'{company_name_prompt}\n\n{text[:3000]}'}],
+                max_tokens=100,
+                temperature=0,
+            )
+            company_name = response.choices[0].message.content.strip()
+
+            if not company_name:
+                logger.warning('Failed to extract company name from text')
+                return None, None
+
+            logger.debug(f'Extracted company name: {company_name}')
+        except Exception as e:
+            logger.error(f'Error extracting company name: {e}')
+            return None, None
+
+        ticker_prompt = f"""What is the stock ticker symbol for {company_name}?
+Reply with ONLY the ticker symbol itself (e.g., AAPL, TSLA, MSFT).
+Do not include any explanation, markdown, formatting, or additional information. Just the ticker."""
+
+        try:
+            response = await client.chat.completions.create(
+                model=settings.ticker_extraction_symbol_model,
+                messages=[{'role': 'user', 'content': ticker_prompt}],
+                max_tokens=50,
+                temperature=0,
+            )
+            ticker_response = response.choices[0].message.content.strip()
+
+            match = re.search(r'\(([A-Z]{1,5})\)', ticker_response)
+            if match:
+                ticker = match.group(1)
+            else:
+                match = re.search(r'\b([A-Z]{1,5})\b', ticker_response)
+                if match:
+                    ticker = match.group(1)
+                else:
+                    ticker = re.sub(r'[^A-Z]', '', ticker_response.upper())[:5]
+
+            if not ticker:
+                logger.warning(f'Could not extract valid ticker from response: {ticker_response}')
+                return None, company_name
+
+            logger.debug(f'Extracted ticker from response: {ticker_response[:100]} -> {ticker}')
+            return ticker, company_name
+
+        except Exception as e:
+            logger.error(f'Error extracting ticker symbol: {e}')
+            return None, company_name

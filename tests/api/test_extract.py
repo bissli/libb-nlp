@@ -1,23 +1,20 @@
+"""API endpoint tests for extraction - require docker container."""
 import os
 
 import requests
-from lnlp.services.pdf import PDFTextExtractor
 
 
 def verify_pdf_content(html_content: str):
     """Verify the content of the SPOT earnings call PDF"""
-    # Test content length
     assert len(html_content) > 10000, 'Content suspiciously short'
 
-    # Test major document sections exist and are in correct order
     sections = [
-        'Spotify Technology SA (SPOT US Equity) Q4',  # Header section
-        '>Company Participants</h4>',  # Company Participants section
-        '>Presentation</h4>',  # Presentation section
-        '>Questions And Answers</h4>'  # Q&A section
+        'Spotify Technology SA (SPOT US Equity) Q4',
+        '>Company Participants</h4>',
+        '>Presentation</h4>',
+        '>Questions And Answers</h4>'
     ]
 
-    # Check sections appear in correct order
     last_pos = -1
     for section in sections:
         pos = html_content.find(section)
@@ -25,7 +22,6 @@ def verify_pdf_content(html_content: str):
         assert pos > last_pos, f'Section "{section}" out of order'
         last_pos = pos
 
-    # Test all participants are listed
     participants = [
         'Alex Norstrom , Co-President, Chief Business Officer',
         'Bryan Goldberg , Head of Investor Relations',
@@ -37,18 +33,15 @@ def verify_pdf_content(html_content: str):
     for participant in participants:
         assert participant in html_content, f'Participant not found: {participant}'
 
-    # Test document beginning and end
     header = 'Spotify Technology SA (SPOT US Equity) Q4 2024 Earnings Call'
     conclusion = "This concludes Spotify's Fourth Quarter 2024 Earnings Call and Webcast"
 
     assert header in html_content, 'Document header not found'
     assert conclusion in html_content, 'Document conclusion not found'
 
-    # Verify key structural elements
     assert 'Operator' in html_content, 'Missing Operator section'
     assert 'Questions And Answers' in html_content, 'Missing Q&A section'
 
-    # Test for presence of key discussion topics
     key_topics = [
         'earnings',
         'revenue',
@@ -64,7 +57,7 @@ def verify_pdf_content(html_content: str):
 
 def test_pdf_extraction_api(docker_container, test_data_dir):
     """Test PDF extraction endpoint with SPOT earnings transcript"""
-    pdf_path = os.path.join(test_data_dir, 'SPOT.pdf')
+    pdf_path = os.path.join(test_data_dir, 'transcripts', 'SPOT.pdf')
 
     with open(pdf_path, 'rb') as pdf_file:
         files = {'file': ('SPOT.pdf', pdf_file, 'application/pdf')}
@@ -77,7 +70,6 @@ def test_pdf_extraction_api(docker_container, test_data_dir):
     assert response.status_code == 200
     result = response.json()
 
-    # Test response structure
     assert 'text' in result
     assert 'html' in result
     assert isinstance(result['text'], list)
@@ -85,18 +77,7 @@ def test_pdf_extraction_api(docker_container, test_data_dir):
     assert len(result['text']) > 0
     assert len(result['html']) > 0
 
-    # Verify PDF content
     verify_pdf_content(result['html'])
-
-
-def test_pdf_extraction_local(test_data_dir):
-    """Test PDF text extraction for SPOT earnings transcript"""
-    pdf_path = os.path.join(test_data_dir, 'SPOT.pdf')
-    extractor = PDFTextExtractor(pdf_path)
-    extracted_html = extractor.extract_html()
-
-    # Verify PDF content
-    verify_pdf_content(extracted_html)
 
 
 if __name__ == '__main__':

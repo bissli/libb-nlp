@@ -17,9 +17,7 @@ pysbd = ">=0.3.4,<1"
 fastapi = ">=0.115.8,<1"
 uvicorn = ">=0.34.0,<1"
 pydantic = ">=2.10.6,<3"
-httpx = ">=0.28.1,<1"
 python-multipart = ">=0.0.20,<1"
-anthropic = ">=0.46.0,<1"
 openai = ">=1.63.2,<2"
 seaborn = ">=0.13.2,<1"
 pendulum = ">=3.0.0,<4"
@@ -27,12 +25,19 @@ psutil = ">=6.1.1,<7"
 pdfplumber = "*"
 hf_xet = "*"
 numpy = "*"
+pyyaml = ">=6.0.0,<7"
 regex = "*"
 
 [tool.poetry.group.dev.dependencies]
-pytest = "*"
-docker = "*"
 bump2version = "*"
+
+[tool.poetry.group.test]
+optional = true
+
+[tool.poetry.group.test.dependencies]
+pytest = "*"
+pytest-asyncio = "*"
+docker = "*"
 
 [[tool.poetry.source]]
 name = "pytorch-cu118"

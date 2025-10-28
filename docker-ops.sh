@@ -7,8 +7,6 @@ readonly SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
 
 # Required environment variables
 readonly REQUIRED_VARS=(
-    "OPENAI_API_KEY"
-    "ANTHROPIC_API_KEY"
     "OPENROUTER_API_KEY"
     "AWS_ACCOUNT_ID"
     "AWS_REGION"

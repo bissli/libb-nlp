@@ -314,7 +314,7 @@ class PDFTextExtractor:
 
     def clean_text(self, text: str) -> str:
         """Clean extracted text while preserving meaningful whitespace"""
-        text = re.sub(r'[\u200b\u200c\u200d\ufeff]', '', text)
+        text = re.sub(r'[\u200b\u200c\u200d\ufeff]', ' ', text)
         text = text.replace('"', '"').replace('"', '"').replace('—', '-')
         # only collapse multiple spaces within lines, not line endings
         text = re.sub(r'[ \t]+', ' ', text)
