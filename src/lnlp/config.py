@@ -21,8 +21,8 @@ class Settings(BaseModel):
     openrouter_referer: str = Field(default_factory=lambda: os.getenv('OPENROUTER_REFERER', 'http://localhost:8000'))
     openrouter_title: str = Field(default_factory=lambda: os.getenv('OPENROUTER_TITLE', 'Libb-NLP API'))
 
-    ticker_extraction_name_model: str = Field(default_factory=lambda: os.getenv('TICKER_EXTRACTION_NAME_MODEL', 'openai/gpt-4o-mini'))
-    ticker_extraction_symbol_model: str = Field(default_factory=lambda: os.getenv('TICKER_EXTRACTION_SYMBOL_MODEL', 'openai/gpt-4o-mini-search-preview'))
+    ticker_extraction_name_model: str = 'anthropic/claude-haiku-4.5'
+    ticker_extraction_symbol_model: str = 'anthropic/claude-haiku-4.5'
 
     model_config = ConfigDict(case_sensitive=True, extra='ignore')
 

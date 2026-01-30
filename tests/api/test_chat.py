@@ -32,7 +32,7 @@ def test_chat_completion(docker_container, test_data_dir):
         transcript = f.read()
 
     request = {
-        'model': 'openrouter/openai/gpt-4o-mini',
+        'model': 'openrouter/anthropic/claude-haiku-4.5',
         'messages': [
             {'content': transcript}
         ],

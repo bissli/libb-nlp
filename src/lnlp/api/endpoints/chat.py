@@ -25,7 +25,7 @@ async def query(
         response = requests.post(
             'http://localhost:8000/chat/query',
             json={
-                'model': 'openrouter/openai/gpt-4o-mini',
+                'model': 'openrouter/anthropic/claude-haiku-4.5',
                 'messages': [{'content': 'prompt text'}]
             }
         )
