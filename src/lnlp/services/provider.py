@@ -3,6 +3,7 @@ import re
 
 from lnlp.config import get_settings
 from lnlp.schemas.chat import ProviderRequest, ProviderResponse
+from lnlp.services.models import get_latest_haiku
 from openai import AsyncOpenAI
 
 logger = logging.getLogger(__name__)
@@ -146,8 +147,6 @@ class LLMProvider:
         logger.info(f'Ticker extraction - Input text length: {len(text):,} chars, '
                     f'Estimated tokens: {len(text) // 4:,}')
 
-        settings = get_settings()
-
         client = AsyncOpenAI(
             api_key=self.openrouter_key,
             base_url='https://openrouter.ai/api/v1',
@@ -157,12 +156,14 @@ class LLMProvider:
             }
         )
 
+        haiku_model = get_latest_haiku()
+
         company_name_prompt = """Extract only the company name from this earnings transcript.
 Reply with just the company name, nothing else. No explanations."""
 
         try:
             response = await client.chat.completions.create(
-                model=settings.ticker_extraction_name_model,
+                model=haiku_model,
                 messages=[{'role': 'user', 'content': f'{company_name_prompt}\n\n{text[:3000]}'}],
                 max_tokens=100,
                 temperature=0,
@@ -184,7 +185,7 @@ Do not include any explanation, markdown, formatting, or additional information.
 
         try:
             response = await client.chat.completions.create(
-                model=settings.ticker_extraction_symbol_model,
+                model=haiku_model,
                 messages=[{'role': 'user', 'content': ticker_prompt}],
                 max_tokens=50,
                 temperature=0,

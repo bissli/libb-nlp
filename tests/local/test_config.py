@@ -13,9 +13,6 @@ def test_settings_defaults(monkeypatch):
 
     assert settings.openrouter_referer == 'http://localhost:8000'
     assert settings.openrouter_title == 'Libb-NLP API'
-    # Ticker extraction models are hardcoded (not from environment)
-    assert settings.ticker_extraction_name_model == 'anthropic/claude-haiku-4.5'
-    assert settings.ticker_extraction_symbol_model == 'anthropic/claude-haiku-4.5'
 
 
 def test_settings_with_env_vars(monkeypatch):
@@ -32,9 +29,6 @@ def test_settings_with_env_vars(monkeypatch):
     assert settings.openrouter_api_key == 'test-key-123'
     assert settings.openrouter_referer == 'https://example.com'
     assert settings.openrouter_title == 'Test App'
-    # Ticker extraction models are hardcoded (not from environment)
-    assert settings.ticker_extraction_name_model == 'anthropic/claude-haiku-4.5'
-    assert settings.ticker_extraction_symbol_model == 'anthropic/claude-haiku-4.5'
 
     # Clean up
     get_settings.cache_clear()

@@ -27,6 +27,8 @@ hf_xet = "*"
 numpy = "*"
 pyyaml = ">=6.0.0,<7"
 regex = "*"
+cachu = "^0.3.3"
+redis = "^7.2.1"
 
 [tool.poetry.group.dev.dependencies]
 bump2version = "*"
